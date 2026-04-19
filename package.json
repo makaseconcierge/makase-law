@@ -1,0 +1,14 @@
+{
+  "name": "makase-law-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "bun run --cwd apps/api dev",
+    "dev:client": "bun run --cwd apps/client-portal-web-app dev",
+    "dev:office": "bun run --cwd apps/law-office-web-app dev",
+    "db:types": "bun run --cwd packages/types db:types"
+  }
+}

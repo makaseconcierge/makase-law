@@ -1,0 +1,21 @@
+{
+  "name": "makase-law-api",
+  "module": "main.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run main.ts",
+    "dev": "bun --hot run main.ts",
+    "db:types": "bun run --cwd ../../packages/types db:types"
+  },
+  "dependencies": {
+    "@makase-law/shared": "workspace:*",
+    "@makase-law/types": "workspace:*",
+    "@supabase/supabase-js": "^2.49.1",
+    "hono": "^4.12.8",
+    "jose": "^6.2.2",
+    "kysely": "^0.28.15"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11"
+  }
+}

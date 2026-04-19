@@ -1,0 +1,206 @@
+
+
+// Leads come in
+let lead = {
+    full_legal_name, 
+    phone_number, 
+    email,
+    stage:'collect_contact_info'
+};
+
+
+
+let again = true; // flag to continue to run the loop again
+while (again) {
+    // Act on lead
+    switch (lead.stage) {
+        case 'collect_contact_info':
+            // need to collect full_legal_name, phone_number, and email so we know who this is and how to contact them
+            if (lead.full_legal_name && lead.phone_number && lead.email) {
+                lead.stage = 'search_entities_for_lead';
+                notifyLawFirm({lead, message: 'A new lead came in!', needsAction: false})
+            } else {
+                collectContactInfoFromLead();
+                again = false;
+            }
+            break;
+        case 'search_entities_for_lead':
+            // Collect_Conflict_Check_Data step 1: see if we have ever encountered this person before in any matter.
+            // this will search parties, experts, witnesses, attorneys, etc. for all past and current matters
+            lead.existingEntity = getEntity({phone_number, email}) => Entity; // looks for an exact match (TODO: should this be phone and email or just phone?)
+            if (lead.existingEntity) {
+                // we know who this is, now let's see what roles they played in previous matters
+                lead.existingEntity.conflictingRoles = searchConflictingRoles(lead.existingEntity) => EntityRole[];
+            }
+
+            // We should also do a fuzzy search based on name to be extra sure we don't miss anyone.
+            lead.possibleEntities = searchEntities(full_legal_name) => Entity[];
+            // for each possible entity, we also need to include what roles they played in previous matters
+            lead.possibleEntities.forEach(possibleEntity => {
+                possibleEntity.conflictingRoles = searchConflictingRoles(possibleEntity) => EntityRole[];
+            });
+
+            lead.stage = 'collect_others_involved';
+            break;
+        case 'collect_others_involved':
+            // pretty strict what can be ethically collected at this stage prior to conflict check. 
+            // matterType
+            // opposingPartyNames (individuals, companies, and their known legal counsel)
+            // otherEntityNames
+            if (lead.opposingPartyNames && lead.otherEntityNames && lead.matterType) {
+                lead.stage = 'search_entities_for_others_involved';
+            } else {
+                collectOtherEntitiesInvolvedFromLead();
+                again = false;
+            }
+            break;
+        case 'search_entities_for_others_involved':
+            // Collect_Conflict_Check_Data step 2: check for conflicts with any of opposing parties or other entities in the matter.
+            lead.possibleConflicts = [];
+            lead.opposingPartyNames.forEach(opposingPartyName => {
+                let possibleConflicts = searchEntities(opposingPartyName) =>  Entity[];
+                possibleConflicts.forEach(possibleConflict => {
+                    possibleConflict.type = 'opposingParty';
+                    possibleConflict.conflictingRoles = searchConflictingRoles(possibleConflict) => EntityRole[];
+                });
+                lead.possibleConflicts.push(...possibleConflicts);
+            });
+            lead.otherEntityNames.forEach(otherEntityName => {
+                let possibleConflicts = searchEntities(otherEntityName) =>  Entity[];
+                possibleConflicts.forEach(possibleConflict => {
+                    possibleConflict.type = 'otherEntity';
+                    possibleConflict.conflictingRoles = searchConflictingRoles(possibleConflict) => EntityRole[];
+                });
+                lead.possibleConflicts.push(...possibleConflicts);
+            });
+
+            // filter out conflicts with no conflicting roles
+            lead.possibleConflicts = lead.possibleConflicts.filter(conflict => conflict.conflictingRoles.length > 0);
+
+            lead.stage = 'existing_entity_check';
+            break;
+        case 'existing_entity_check':
+            // Using results from Collect_Conflict_Check_Data, determine if the conflict check passed or needs to be escalated to a human.
+            // mvp: escalate all matches to be checked by a human
+            // goal: use custom conflict rules based on current matter type, previous matter type and entity role in the previous matter
+            if (lead.existingEntity) {
+                //we know who this is.
+                if (lead.possibleEntities?.filter(entity => entity.id !== lead.existingEntity.id).length > 0) {
+                    // We know who this is, but they happened to match another entity in the database as well
+                    // We need a human to decide if one of these matches them so we dont add a duplicate record to the entities table.
+                    // Once this decision is made we can re-evaluate. 
+                    lead.stage = 'manual_existing_entity_check';
+                } else {
+                    // We know who this is, and are sure their data is accurate
+                    lead.stage = 'conflict_check';
+                }
+            } else if (lead.possibleEntities.length > 0) {
+                // We aren't sure who this is but have some guesses.
+                // We need a human to decide if one of these matches them so we dont add a duplicate record to the entities table.
+                // Once this decision is made we can re-evaluate. 
+                lead.stage = 'manual_existing_entity_check';
+            } else {
+                // This is a new person, we don't know who they are yet
+                // We have searched for previous matters involving them and found nothing.
+                lead.stage = 'conflict_check';
+            }
+
+            if (lead.stage === 'conflict_check') {;
+                lead.existing_entity_check_passed_at = new Date();
+            }
+            break;
+        case 'manual_existing_entity_check':
+            if (lead.existing_entity_check_passed_by) {
+                lead.stage = 'conflict_check';
+            } else {
+                // still waiting for human review
+                // they will need to either pick one of the possible entities or validate none of them match
+                notifyLawFirm({newLead: lead, message: 'New lead needs to be validated, please review', needsAction: true});
+                again = false;
+            }
+            break;
+        case 'conflict_check':
+            // Check if this person is anything other than a client in a previous matter
+            // TODO: assuming this is ok, but should being a previous client be a conflict?
+            if (lead.existingEntity?.conflictingRoles.some(role => role.type !== 'client')) {
+                // This person has played a role in a previous matter other than client
+                lead.stage = 'manual_conflict_check';
+            } else {
+                // lead has no conflicting roles in other matters. now to check other entities involved in this matter
+                if (lead.possibleConflicts.length > 0) {
+                    lead.stage = 'manual_conflict_check';
+                } else {
+                    lead.conflict_check_passed_at = new Date();
+                    lead.stage = 'pre_consultation';
+                }
+            }
+            break;
+        case 'manual_conflict_check':
+            if (lead.conflict_check_passed_by) {
+                lead.stage = 'pre_consultation';
+            } else {
+                // still waiting for human review
+                // they will need to:
+                // mark which conflicts actually match
+                // if any matches are conflicts, pass the conflict check
+                // if no matches are conflicts, fail the conflict check
+                notifyLawFirm({lead, message: 'Manual conflict check needed, please review', needsAction: true});
+                again = false;
+            }
+            break;
+        case 'pre_consultation':
+            if (!lead.matterData) {
+                // Waiting for matter data to be collected
+                // data collected is dependent on the matter type
+                // this marks the start of confidential information.
+                collectMatterDataFromLead();
+                again = false;
+            } else {
+                lead.score = calculateScore(lead.matterData) => number;
+                lead.suggestedAttorney = getSuggestedAttorney(lead.score) => Attorney;
+                lead.stage = 'manually_assign_attorney';
+            }
+            
+            break;
+        case 'manually_assign_attorney':
+            if (lead.assigned_attorney_id) {
+                sendSchedulingLinkToLead();
+                lead.stage = 'schedule_consultation';
+            } else {
+                // still waiting for attorney assignment
+                notifyLawFirm({lead, message: 'Lead assignment needed', needsAction: true})
+                again = false;
+            }
+            break;
+        case 'schedule_consultation':
+            // TODO: should this be before or after fee aggreement?
+            if (lead.consultation_scheduled_at) {
+                sendFeeAgreementToLead();
+                lead.stage = 'collect_fee_agreement';
+            } else {
+                // still waiting for scheduling
+                again = false;
+            }
+            break;
+        case 'collect_fee_agreement':
+            if (lead.feeAgreementAccepted) {
+                lead.stage = 'retained';
+                createMatter(lead);
+            } else if (lead.feeAgreementDeclined) {
+                lead.stage = 'declined_fee_agreement';
+                notifyLead("Thank you for your time. We will not be able to assist you with your case.");
+            } else {
+                // still waiting for fee agreement acceptance
+                again = false;
+            }
+            break;
+        default:
+            again = false;
+    }
+    saveLead(lead);
+}
+
+
+
+
+

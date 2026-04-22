@@ -60,10 +60,13 @@ BEGIN
     NEW.updated_at := NOW();
     NEW.updated_by := acting;
 
-    IF NEW.deleted_at IS NOT NULL
-       AND OLD.deleted_at IS NULL
-       AND NEW.deleted_by IS NULL THEN
-      NEW.deleted_by := acting;
+    -- deleted_by is fully trigger-owned, same as updated_by: the caller
+    -- cannot attribute a deletion (or undeletion) to anyone but themselves,
+    -- and cannot change deleted_by in isolation without flipping deleted_at.
+    IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
+      NEW.deleted_by := CASE WHEN NEW.deleted_at IS NULL THEN NULL ELSE acting END;
+    ELSE
+      NEW.deleted_by := OLD.deleted_by;
     END IF;
   END IF;
 

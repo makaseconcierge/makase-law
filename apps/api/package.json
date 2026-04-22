@@ -8,12 +8,14 @@
     "db:types": "bun run --cwd ../../packages/types db:types"
   },
   "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
     "@makase-law/shared": "workspace:*",
     "@makase-law/types": "workspace:*",
     "@supabase/supabase-js": "^2.49.1",
     "hono": "^4.12.8",
     "jose": "^6.2.2",
-    "kysely": "^0.28.15"
+    "kysely": "^0.28.15",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11"

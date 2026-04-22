@@ -1,4 +1,4 @@
-import type { Office } from "@makase-law/types";
+import type { OfficePatch } from "@makase-law/types";
 import { getDb } from "../dbClient";
 
 export async function get(office_id: string) {
@@ -9,7 +9,7 @@ export async function get(office_id: string) {
     .executeTakeFirst();
 }
 
-export async function update(office_id: string, data: Partial<Office>) {
+export async function update(office_id: string, data: OfficePatch) {
   return getDb()
     .updateTable("offices")
     .where("office_id", "=", office_id)

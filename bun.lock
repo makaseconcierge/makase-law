@@ -8,12 +8,14 @@
     "apps/api": {
       "name": "makase-law-api",
       "dependencies": {
+        "@hono/zod-validator": "^0.7.6",
         "@makase-law/shared": "workspace:*",
         "@makase-law/types": "workspace:*",
         "@supabase/supabase-js": "^2.49.1",
         "hono": "^4.12.8",
         "jose": "^6.2.2",
         "kysely": "^0.28.15",
+        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.11",
@@ -63,6 +65,7 @@
       "dependencies": {
         "@makase-law/types": "workspace:*",
         "kysely-postgres-js": "^3.0.0",
+        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.12",
@@ -190,6 +193,8 @@
     "@fontsource-variable/geist": ["@fontsource-variable/geist@5.2.8", "", {}, "sha512-cJ6m9e+8MQ5dCYJsLylfZrgBh6KkG4bOLckB35Tr9J/EqdkEM6QllH5PxqP1dhTvFup+HtMRPuz9xOjxXJggxw=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
+
+    "@hono/zod-validator": ["@hono/zod-validator@0.7.6", "", { "peerDependencies": { "hono": ">=3.9.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Io1B6d011Gj1KknV4rXYz4le5+5EubcWEU/speUjuw9XMMIaP3n78yXLhjd2A3PXaXaUwEAluOiAyLqhBEJgsw=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 

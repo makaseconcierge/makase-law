@@ -30,6 +30,8 @@ const authorizeEmployee: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set("office_id", office.office_id);
   c.set("office", office);
   c.set("employee", employee);
+  c.set("permissions", permissions);
+  c.set("permissionsString", permissions.join(","));
 
   await next();
 };

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
-import { offices } from "@makase-law/shared";
+import { zValidator } from "@hono/zod-validator";
+import { offices, schemas } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
+import { requirePermission } from "@/middleware/requirePermission";
 
 
 const officeInfoRoutes = new Hono<AppEnv>()
@@ -9,14 +11,27 @@ const officeInfoRoutes = new Hono<AppEnv>()
     const office = await offices.get(office_id);
     return c.json(office);
   })
-  .patch("/", async (c) => {
-    if (!c.get("permissionsString").includes('office_info:edit')) {
-      return c.json({ code: "unauthorized", message: "Unauthorized" }, 403);
-    }
-    const office_id = c.get("office_id");
-    const data = await c.req.json();
-    const office = await offices.update(office_id, data);
-    return c.json(office);
-  })
+  .patch(
+    "/",
+    requirePermission("office_info:edit"),
+    zValidator("json", schemas.OfficePatchSchema, (result, c) => {
+      if (!result.success) {
+        return c.json(
+          {
+            code: "invalid_request",
+            message: "Invalid request body",
+            errors: result.error.issues,
+          },
+          400,
+        );
+      }
+    }),
+    async (c) => {
+      const office_id = c.get("office_id");
+      const data = c.req.valid("json");
+      const office = await offices.update(office_id, data);
+      return c.json(office);
+    },
+  );
 
 export default officeInfoRoutes;

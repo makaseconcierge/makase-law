@@ -1,5 +1,6 @@
-import type { Matter, NewMatter } from "@makase-law/types";
+import type { MatterPatch, NewMatter } from "@makase-law/types";
 import { getDb } from "../dbClient";
+import { auditPlaceholder } from "../audit";
 
 export async function create(
   office_id: string,
@@ -7,7 +8,7 @@ export async function create(
 ) {
   return getDb()
     .insertInto("matters")
-    .values({ ...data, office_id })
+    .values({ ...data, office_id, ...auditPlaceholder })
     .returningAll()
     .executeTakeFirst();
 }
@@ -24,7 +25,7 @@ export async function get(office_id: string, matter_id: string) {
 export async function update(
   office_id: string,
   matter_id: string,
-  data: Partial<Matter>,
+  data: MatterPatch,
 ) {
   return getDb()
     .updateTable("matters")

@@ -1,0 +1,61 @@
+import { z } from "zod";
+import type { MatterPatch, NewMatter } from "@makase-law/types";
+import { JsonObjectSchema } from "./jsonSchema";
+
+const MATTER_STAGES = [
+  "consultation",
+  "setup",
+  "active",
+  "closed",
+  "archived",
+] as const;
+
+const BILLING_TYPES = [
+  "active",
+  "active_deferred",
+  "contingency",
+  "flat_fee",
+  "flat_fee_plus_hourly",
+] as const;
+
+/**
+ * Shared column shapes so create/patch stay aligned. When zod finally
+ * ships a first-class "partial the required fields" helper we can drop
+ * this; for now the duplication is explicit and shallow.
+ */
+const matterFieldsSchema = z.object({
+  description: z.string().optional(),
+  stage: z.enum(MATTER_STAGES).optional(),
+  type: z.string().optional(),
+  billing_type: z.enum(BILLING_TYPES).optional(),
+  billing_settings: JsonObjectSchema.optional(),
+  started_representation_at: z.coerce.date().nullable().optional(),
+  ended_representation_at: z.coerce.date().nullable().optional(),
+  referral_source: z.string().nullable().optional(),
+  referral_id: z.string().nullable().optional(),
+  referral_data: JsonObjectSchema.optional(),
+  preferred_office_location: z.string().optional(),
+  data: JsonObjectSchema.optional(),
+});
+
+/**
+ * Runtime validator for POST payloads that create a new matter.
+ * `office_id` is omitted — it comes from the route param.
+ */
+export const NewMatterSchema = matterFieldsSchema
+  .extend({
+    title: z.string().min(1).max(300),
+  })
+  .strict() satisfies z.ZodType<NewMatter>;
+
+/**
+ * Runtime validator for PATCH payloads to an existing matter. Callers
+ * who want to archive should use the dedicated (future)
+ * `matters.archive()` service method; `archived_at` is intentionally
+ * not patchable here.
+ */
+export const MatterPatchSchema = matterFieldsSchema
+  .extend({
+    title: z.string().min(1).max(300).optional(),
+  })
+  .strict() satisfies z.ZodType<MatterPatch>;

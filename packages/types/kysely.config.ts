@@ -13,6 +13,7 @@ export default defineConfig({
   overrides: {
     columns: {
       "offices.role_config": "OfficeRoleConfig",
+      "_offices.role_config": "OfficeRoleConfig",
     }
   }
 });

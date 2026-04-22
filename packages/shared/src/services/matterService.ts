@@ -1,7 +1,10 @@
-import type { Matter } from "@makase-law/types";
+import type { Matter, NewMatter } from "@makase-law/types";
 import { getDb } from "../dbClient";
 
-export async function create(office_id: string, data: Matter) {
+export async function create(
+  office_id: string,
+  data: NewMatter,
+) {
   return getDb()
     .insertInto("matters")
     .values({ ...data, office_id })

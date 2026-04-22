@@ -251,7 +251,7 @@ export interface _Offices {
   name: string;
   office_id: Generated<string>;
   phone: string | null;
-  role_config: Generated<Json>;
+  role_config: OfficeRoleConfig;
   updated_at: Generated<Timestamp>;
   updated_by: string;
   website: string | null;

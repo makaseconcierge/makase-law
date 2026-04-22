@@ -40,10 +40,26 @@ BEGIN
     NEW.updated_at := NEW.created_at;
     NEW.updated_by := acting;
   ELSIF TG_OP = 'UPDATE' THEN
+    -- Preserve creation metadata; history is not rewritable.
     NEW.created_at := OLD.created_at;
     NEW.created_by := OLD.created_by;
+
+    -- Restore updated_at/by to OLD values so the no-op check below compares
+    -- the caller's real intent against the old row. If we stamped fresh
+    -- values first, every UPDATE would look non-no-op.
+    NEW.updated_at := OLD.updated_at;
+    NEW.updated_by := OLD.updated_by;
+
+    -- Return NULL to cancel a no-op UPDATE: zero rows written, no AFTER
+    -- triggers, no audit_log entry, updated_at stays truthful as
+    -- "last time this row actually changed."
+    IF NEW IS NOT DISTINCT FROM OLD THEN
+      RETURN NULL;
+    END IF;
+
     NEW.updated_at := NOW();
     NEW.updated_by := acting;
+
     IF NEW.deleted_at IS NOT NULL
        AND OLD.deleted_at IS NULL
        AND NEW.deleted_by IS NULL THEN

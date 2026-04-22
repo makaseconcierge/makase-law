@@ -17,13 +17,13 @@ const authorizeEmployee: MiddlewareHandler<AppEnv> = async (c, next) => {
     employees.get(office_id, authUser.id),
     offices.get(office_id),
   ]);
-  if (!employee || !office || !office.office_id || !office.role_config) {
+  if (!employee || !office) {
     return c.json({ code: "unauthorized", message: "You do not have access to this office" }, 403);
   }
 
   const permissions: string[] = [];
-  (employee.dashboard_roles ?? []).forEach((role) => {
-    let rolePermissions = office.role_config![role] as string[];
+  employee.dashboard_roles.forEach((role) => {
+    let rolePermissions = office.role_config[role] as string[];
     permissions.push(...rolePermissions);
   });
 

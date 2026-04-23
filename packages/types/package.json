@@ -4,20 +4,20 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./db": "./src/dbTypes.ts"
+    ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
-    "db:types": "kysely-codegen --config-file ./kysely.config.ts"
+    "db:types": "kanel"
   },
   "peerDependencies": {
     "kysely": "^0.28.15"
   },
   "devDependencies": {
     "@types/bun": "^1.3.12",
+    "kanel": "^4.0.2",
+    "kanel-kysely": "^4.0.0",
     "kysely": "^0.28.15",
-    "kysely-codegen": "^0.20.0",
     "pg": "^8.20.0"
   }
 }

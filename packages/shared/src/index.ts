@@ -5,8 +5,6 @@ export {
   getActingUserId,
   SYSTEM_USER_ID,
 } from "./runAs";
-export { auditPlaceholder } from "./audit";
-
 export * as matters from "./services/matterService";
 export * as offices from "./services/officeService";
 export * as employees from "./services/employeeService";

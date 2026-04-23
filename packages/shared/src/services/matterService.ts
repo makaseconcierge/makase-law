@@ -1,6 +1,5 @@
 import type { MatterPatch, NewMatter } from "@makase-law/types";
 import { getDb } from "../dbClient";
-import { auditPlaceholder } from "../audit";
 
 export async function create(
   office_id: string,
@@ -8,7 +7,7 @@ export async function create(
 ) {
   return getDb()
     .insertInto("matters")
-    .values({ ...data, office_id, ...auditPlaceholder })
+    .values({ ...data, office_id })
     .returningAll()
     .executeTakeFirst();
 }

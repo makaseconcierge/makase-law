@@ -1,6 +1,15 @@
-import type { Insertable, Selectable } from "kysely";
-import type { DB } from "./remappedDB";
-import type { AuthUsers } from "./dbTypes";
+import type { Offices, NewOffices } from "./generated/app/Offices.js";
+import type { Employees, NewEmployees } from "./generated/app/Employees.js";
+import type { Matters, NewMatters } from "./generated/app/Matters.js";
+import type { MatterStaff, NewMatterStaff } from "./generated/app/MatterStaff.js";
+import type { TimeEntries, NewTimeEntries } from "./generated/app/TimeEntries.js";
+import type { Leads, NewLeads } from "./generated/app/Leads.js";
+import type { Tasks, NewTasks } from "./generated/app/Tasks.js";
+import type { Invoices, NewInvoices } from "./generated/app/Invoices.js";
+import type { Expenses, NewExpenses } from "./generated/app/Expenses.js";
+import type { InvoicePayments, NewInvoicePayments } from "./generated/app/InvoicePayments.js";
+import type { Forms, NewForms } from "./generated/app/Forms.js";
+import type { Users } from "./generated/auth/Users.js";
 
 /**
  * Columns owned exclusively by the `set_audit_fields` trigger. Callers
@@ -20,48 +29,48 @@ type AuditColumns =
   | "deleted_at"
   | "deleted_by";
 
-export type Office = Selectable<DB["offices"]>;
-export type NewOffice = Omit<Insertable<DB["offices"]>, AuditColumns>;
+export type Office = Offices;
+export type NewOffice = Omit<NewOffices, AuditColumns>;
 export type OfficePatch = Partial<Omit<Office, AuditColumns | "office_id">>;
 
-export type Employee = Selectable<DB["employees"]>;
-export type NewEmployee = Omit<Insertable<DB["employees"]>, AuditColumns>;
+export type Employee = Employees;
+export type NewEmployee = Omit<NewEmployees, AuditColumns>;
 export type EmployeePatch = Partial<Omit<Employee, AuditColumns | "user_id" | "office_id">>;
 
-export type Matter = Selectable<DB["matters"]>;
-export type NewMatter = Omit<Insertable<DB["matters"]>, AuditColumns | "office_id">;
+export type Matter = Matters;
+export type NewMatter = Omit<NewMatters, AuditColumns | "office_id">;
 export type MatterPatch = Partial<Omit<Matter, AuditColumns | "matter_id" | "office_id">>;
 
-export type MatterStaffMember = Selectable<DB["matter_staff"]>;
-export type NewMatterStaffMember = Omit<Insertable<DB["matter_staff"]>, AuditColumns | "office_id">;
+export type MatterStaffMember = MatterStaff;
+export type NewMatterStaffMember = Omit<NewMatterStaff, AuditColumns | "office_id">;
 export type MatterStaffPatch = Partial<Omit<MatterStaffMember, AuditColumns | "office_id" | "matter_id" | "user_id" | "role">>;
 
-export type TimeEntry = Selectable<DB["time_entries"]>;
-export type NewTimeEntry = Omit<Insertable<DB["time_entries"]>, AuditColumns | "office_id">;
+export type TimeEntry = TimeEntries;
+export type NewTimeEntry = Omit<NewTimeEntries, AuditColumns | "office_id">;
 export type TimeEntryPatch = Partial<Omit<TimeEntry, AuditColumns | "time_entry_id" | "office_id">>;
 
-export type Lead = Selectable<DB["leads"]>;
-export type NewLead = Omit<Insertable<DB["leads"]>, AuditColumns | "office_id">;
+export type Lead = Leads;
+export type NewLead = Omit<NewLeads, AuditColumns | "office_id">;
 export type LeadPatch = Partial<Omit<Lead, AuditColumns | "lead_id" | "office_id">>;
 
-export type Task = Selectable<DB["tasks"]>;
-export type NewTask = Omit<Insertable<DB["tasks"]>, AuditColumns | "office_id">;
+export type Task = Tasks;
+export type NewTask = Omit<NewTasks, AuditColumns | "office_id">;
 export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id">>;
 
-export type Invoice = Selectable<DB["invoices"]>;
-export type NewInvoice = Omit<Insertable<DB["invoices"]>, AuditColumns | "office_id">;
+export type Invoice = Invoices;
+export type NewInvoice = Omit<NewInvoices, AuditColumns | "office_id">;
 export type InvoicePatch = Partial<Omit<Invoice, AuditColumns | "invoice_id" | "office_id">>;
 
-export type Expense = Selectable<DB["expenses"]>;
-export type NewExpense = Omit<Insertable<DB["expenses"]>, AuditColumns | "office_id">;
+export type Expense = Expenses;
+export type NewExpense = Omit<NewExpenses, AuditColumns | "office_id">;
 export type ExpensePatch = Partial<Omit<Expense, AuditColumns | "expense_id" | "office_id">>;
 
-export type InvoicePayment = Selectable<DB["invoice_payments"]>;
-export type NewInvoicePayment = Omit<Insertable<DB["invoice_payments"]>, AuditColumns | "office_id">;
+export type InvoicePayment = InvoicePayments;
+export type NewInvoicePayment = Omit<NewInvoicePayments, AuditColumns | "office_id">;
 export type InvoicePaymentPatch = Partial<Omit<InvoicePayment, AuditColumns | "invoice_payment_id" | "office_id">>;
 
-export type Form = Selectable<DB["forms"]>;
-export type NewForm = Omit<Insertable<DB["forms"]>, AuditColumns | "office_id">;
+export type Form = Forms;
+export type NewForm = Omit<NewForms, AuditColumns | "office_id">;
 export type FormPatch = Partial<Omit<Form, AuditColumns | "form_id" | "office_id">>;
 
-export type AuthUser = Selectable<AuthUsers>;
+export type AuthUser = Users;

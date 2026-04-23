@@ -48,6 +48,17 @@ export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface _AuditLog {
+  audit_log_id: Generated<Int8>;
+  changed_at: Generated<Timestamp>;
+  changed_by: string;
+  diff: Json;
+  op: string;
+  record_pk: Json;
+  table_name: string;
+  table_schema: string;
+}
+
 export interface _Employees {
   bar_numbers: Generated<Json>;
   created_at: Generated<Timestamp>;
@@ -1179,6 +1190,7 @@ export interface VaultSecrets {
 }
 
 export interface DB {
+  _audit_log: _AuditLog;
   _employees: _Employees;
   _entities: _Entities;
   _entity_roles: _EntityRoles;

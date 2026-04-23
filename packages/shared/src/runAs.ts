@@ -21,15 +21,20 @@ export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001";
  *    writes from earlier in the same scope.
  *  - A thrown error rolls back the transaction; the attribution GUC is
  *    automatically cleared because it was set with `is_local = true`.
- *  - Nested `runAs` calls are a no-op: the outer transaction and
- *    attribution win. Do not rely on nested calls to swap actors.
+ *  - Nested `runAs` calls always throw — a request must have exactly one
+ *    attributed scope. If you hit this, a service is being called from
+ *    inside middleware that already opened a `runAs` scope, which is a
+ *    bug.
  */
 export async function runAs<T>(
   actingUserId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const existing = txStorage.getStore();
-  if (existing) return fn();
+  if (txStorage.getStore()) {
+    throw new Error(
+      "runAs called inside an existing runAs scope. Only one attributed transaction scope is allowed per request.",
+    );
+  }
 
   return rootDb.transaction().execute(async (trx) => {
     await sql`SELECT set_config('app.acting_user_id', ${actingUserId}, true)`.execute(trx);

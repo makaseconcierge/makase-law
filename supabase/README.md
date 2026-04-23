@@ -88,6 +88,8 @@ Every write to an `app._*` table must be attributed to a user. This is enforced 
 
 The GUC is set by the shared `runAs(user_id, fn)` helper in `@makase-law/shared`, which opens a Kysely transaction, calls `set_config('app.acting_user_id', user_id, true)` on that connection, stashes the transaction handle in `AsyncLocalStorage`, then runs `fn`. Every Kysely query inside `fn` that goes through `getDb()` runs on that same pinned connection, so writes land in the attributed transaction. On commit or rollback, the GUC is automatically cleared (`is_local = true`).
 
+`runAs` enforces a single-actor invariant: nested calls with the same user are a no-op (service composition is fine), but nested calls with a *different* user throw. A request must attribute all its writes to exactly one user — swapping actor mid-transaction would make the audit trail lie.
+
 The Hono API wires this into a `withTx` middleware that wraps mutating requests in `runAs(c.get("user_id"), next)`. GET requests skip the wrapper because they issue no writes. Cron jobs, admin scripts, and migrations call `runAsSystem(fn)` (or `runAs(SYSTEM_USER_ID, fn)`), which attributes to the seeded SYSTEM user. See the API's `apps/api/src/middleware/withTx.ts` and the shared package's `src/runAs.ts` for the implementation.
 
 **Consequences for application code:**
@@ -133,19 +135,26 @@ CREATE TABLE app._foo (
     CONSTRAINT foo_office_uk UNIQUE (office_id, foo_id)
 );
 
-CREATE VIEW app.foo WITH (security_invoker = true)
-AS SELECT * FROM app._foo WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._foo(office_id) WHERE deleted_at IS NULL;
 
-CREATE TRIGGER foo_audit BEFORE INSERT OR UPDATE ON app._foo
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.foo
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('foo');
 ```
 
+`app.setup_table('foo')` creates the active-record view (`app.foo`) and attaches all three standard triggers (audit attribution, delete prevention, audit log) in one call. That's all you need — no manual `CREATE VIEW` or `CREATE TRIGGER` statements.
+
 If the new table needs tenant-safe FK references from other tables, the composite `(office_id, foo_id)` unique constraint above is what enables them.
+
+## Audit log
+
+`app.audit_log` is an append-only, immutable ledger of every row change in the `app` schema. It has no underscore prefix because it doesn't follow the `_table`/view soft-delete pattern. DML is revoked from all roles; only the `SECURITY DEFINER` trigger function can INSERT. The `app.write_audit_log` AFTER INSERT OR UPDATE OR DELETE trigger writes one row per change with:
+
+- `table_schema` / `table_name` / `record_pk` — `record_pk` is a JSONB object keyed by the table's actual primary-key column name(s), so composite keys work generically.
+- `op` — `'INSERT' | 'UPDATE' | 'DELETE'`.
+- `diff` — full row as JSONB for INSERT/DELETE; for UPDATE, `{col: {from, to}}` for changed columns only, with `updated_at` / `updated_by` stripped (they'd appear on every row otherwise and are already implied by `changed_at` / `changed_by`).
+- `changed_by` — prefers the per-transaction GUC (`app.acting_user_id`), falls back to the row's `updated_by` so direct SQL writes without `runAs` still log.
+- `changed_at` — server time of the change.
+
+No-op UPDATEs do not produce a log row (the BEFORE trigger `set_audit_fields` returns `NULL`, so `write_audit_log` never fires).
 
 ## Bootstrap / seed flow
 
@@ -176,5 +185,5 @@ After editing the migration, run all three before committing.
 
 - **Syncing `auth.users` email/phone on UPDATE** — done.
 - **DB-level enforcement of `updated_by` / `created_by`** — done (`set_audit_fields` trigger + `app.acting_user_id` GUC + `runAs` in `@makase-law/shared`).
+- **`app._audit_log` with JSONB diffs** — done (see Audit log section above).
 - **RLS policies on `app`** — not added. Currently unnecessary because the schema is not exposed via PostgREST. Revisit if/when direct `supabase-js` client access is introduced.
-- **`app._audit_log` with JSONB diffs** — planned. `changed_by` will derive from the row's `updated_by` (not directly from `app.acting_user_id`), so nothing about that design changes with the attribution trigger in place.

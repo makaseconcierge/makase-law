@@ -6,6 +6,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON TABLES FROM anon, authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON FUNCTIONS FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
+-- service_role is the API's connection role. Grant DML but not DDL or TRUNCATE.
+GRANT USAGE ON SCHEMA app TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+  GRANT USAGE ON SEQUENCES TO service_role;
+
 -- EXTENSIONS
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
@@ -83,6 +90,129 @@ BEGIN
 END;
 $$;
 
+-- Creates the active-record view and attaches all standard triggers.
+-- Call as: SELECT app.setup_table('offices');
+-- Expects app._offices to already exist. Creates app.offices (view),
+-- then attaches set_audit_fields, prevent_delete, and write_audit_log.
+CREATE OR REPLACE FUNCTION app.setup_table(base_name TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  EXECUTE format(
+    'CREATE VIEW app.%I WITH (security_invoker = true) '
+    'AS SELECT * FROM app.%I WHERE deleted_at IS NULL',
+    base_name, '_' || base_name
+  );
+  EXECUTE format(
+    'CREATE TRIGGER %I_audit BEFORE INSERT OR UPDATE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields()',
+    base_name, '_' || base_name
+  );
+  EXECUTE format(
+    'CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
+    base_name
+  );
+  EXECUTE format(
+    'CREATE TRIGGER %I_log AFTER INSERT OR UPDATE OR DELETE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.write_audit_log()',
+    '_' || base_name, '_' || base_name
+  );
+END;
+$$;
+
+-- AUDIT LOG
+-- The write_audit_log function is defined here but the audit_log table
+-- it writes into is declared further down (after _user_profiles, so the
+-- changed_by FK resolves). Function bodies are parsed lazily — table
+-- references are resolved at execution time. SECURITY DEFINER so the
+-- function can INSERT into the locked-down audit_log table.
+CREATE OR REPLACE FUNCTION app.write_audit_log()
+RETURNS trigger LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  diff       JSONB;
+  record_pk  JSONB := '{}'::jsonb;
+  pk_cols    TEXT[];
+  col        TEXT;
+  old_j      JSONB;
+  new_j      JSONB;
+  acting     UUID;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    diff := to_jsonb(NEW);
+  ELSIF TG_OP = 'UPDATE' THEN
+    old_j := to_jsonb(OLD);
+    new_j := to_jsonb(NEW);
+    SELECT jsonb_object_agg(
+             key,
+             jsonb_build_object('from', old_j -> key, 'to', new_j -> key)
+           )
+      INTO diff
+      FROM jsonb_object_keys(new_j) AS key
+     WHERE (old_j -> key) IS DISTINCT FROM (new_j -> key);
+
+    -- set_audit_fields already skips true no-ops via RETURN NULL; if
+    -- we still got here with no column changes, it means only the
+    -- trigger-owned audit columns flipped (e.g., updated_at/by). Skip
+    -- so the ledger doesn't record "update: only updated_at changed"
+    -- for every write — that's noise.
+    IF diff IS NULL OR diff = '{}'::jsonb THEN
+      RETURN NULL;
+    END IF;
+    -- updated_at/by always differ on real writes; drop them from the
+    -- diff since they're derivable and would otherwise appear in every
+    -- single log row.
+    diff := diff - 'updated_at' - 'updated_by';
+    IF diff = '{}'::jsonb THEN
+      RETURN NULL;
+    END IF;
+  ELSIF TG_OP = 'DELETE' THEN
+    diff := to_jsonb(OLD);
+  END IF;
+
+  SELECT array_agg(a.attname ORDER BY a.attnum)
+    INTO pk_cols
+    FROM pg_constraint c
+    JOIN pg_attribute a
+      ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+   WHERE c.contype = 'p' AND c.conrelid = TG_RELID;
+
+  FOREACH col IN ARRAY pk_cols LOOP
+    record_pk := record_pk || jsonb_build_object(
+      col,
+      CASE TG_OP
+        WHEN 'DELETE' THEN to_jsonb(OLD) -> col
+        ELSE to_jsonb(NEW) -> col
+      END
+    );
+  END LOOP;
+
+  -- Prefer the per-transaction GUC (set by runAs) so an UPDATE that
+  -- only flipped deleted_at still logs the actor who issued it. Fall
+  -- back to the row's own updated_by (which set_audit_fields wrote
+  -- from the same GUC) so direct-SQL writes without runAs still log.
+  acting := COALESCE(
+    NULLIF(current_setting('app.acting_user_id', true), '')::uuid,
+    CASE TG_OP
+      WHEN 'DELETE' THEN (to_jsonb(OLD) ->> 'updated_by')::uuid
+      ELSE (to_jsonb(NEW) ->> 'updated_by')::uuid
+    END
+  );
+
+  INSERT INTO app.audit_log (
+    table_schema, table_name, record_pk, op, diff, changed_by
+  ) VALUES (
+    TG_TABLE_SCHEMA, TG_TABLE_NAME, record_pk, TG_OP, diff, acting
+  );
+
+  RETURN NULL;  -- AFTER trigger, return value ignored
+END;
+$$;
+
 -- USER PROFILES
 CREATE TABLE app._user_profiles (
     user_id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE NO ACTION,
@@ -97,14 +227,7 @@ CREATE TABLE app._user_profiles (
     deleted_by      UUID REFERENCES app._user_profiles(user_id),
     CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
-CREATE VIEW app.user_profiles WITH (security_invoker = true)
-AS SELECT * FROM app._user_profiles WHERE deleted_at IS NULL;
-
-CREATE TRIGGER user_profiles_audit BEFORE INSERT OR UPDATE ON app._user_profiles
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.user_profiles
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('user_profiles');
 
 -- Auth-triggered writes to app._user_profiles set app.acting_user_id to
 -- the user themselves so the audit trigger attributes the row correctly.
@@ -152,6 +275,32 @@ WHEN (OLD.email IS DISTINCT FROM NEW.email OR OLD.phone IS DISTINCT FROM NEW.pho
 EXECUTE FUNCTION app.handle_auth_user_updated();
 
 
+-- AUDIT LOG
+-- Immutable append-only ledger. No underscore prefix because it doesn't
+-- follow the _table/view soft-delete pattern — there is no view, no
+-- soft delete, and no audit columns. DML is revoked from all roles;
+-- only the SECURITY DEFINER trigger function can INSERT.
+CREATE TABLE app.audit_log (
+    audit_log_id BIGSERIAL PRIMARY KEY,
+    table_schema TEXT NOT NULL,
+    table_name   TEXT NOT NULL,
+    record_pk    JSONB NOT NULL,
+    op           TEXT NOT NULL CHECK (op IN ('INSERT', 'UPDATE', 'DELETE')),
+    diff         JSONB NOT NULL,
+    changed_by   UUID NOT NULL REFERENCES app._user_profiles(user_id),
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON app.audit_log (table_schema, table_name, changed_at DESC);
+CREATE INDEX ON app.audit_log USING gin (record_pk);
+CREATE INDEX ON app.audit_log (changed_by, changed_at DESC);
+
+-- Lock down: only the SECURITY DEFINER trigger function (owned by
+-- postgres) can INSERT. service_role can SELECT (for the audit UI).
+-- No role can UPDATE, DELETE, or TRUNCATE.
+REVOKE ALL ON app.audit_log FROM PUBLIC, service_role;
+GRANT SELECT ON app.audit_log TO service_role;
+
+
 -- OFFICES
 CREATE TABLE app._offices (
     office_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,14 +319,7 @@ CREATE TABLE app._offices (
     deleted_by  UUID REFERENCES app._user_profiles(user_id),
     CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
-CREATE VIEW app.offices WITH (security_invoker = true)
-AS SELECT * FROM app._offices WHERE deleted_at IS NULL;
-
-CREATE TRIGGER offices_audit BEFORE INSERT OR UPDATE ON app._offices
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.offices
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('offices');
 
 
 -- EMPLOYEES
@@ -199,14 +341,7 @@ CREATE TABLE app._employees (
 );
 CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
 
-CREATE VIEW app.employees WITH (security_invoker = true)
-AS SELECT * FROM app._employees WHERE deleted_at IS NULL;
-
-CREATE TRIGGER employees_audit BEFORE INSERT OR UPDATE ON app._employees
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.employees
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('employees');
 
 
 -- MATTERS
@@ -245,17 +380,10 @@ CREATE TABLE app._matters (
         'consultation', 'setup', 'active', 'closed', 'archived'
     ))
 );
-CREATE VIEW app.matters WITH (security_invoker = true)
-AS SELECT * FROM app._matters WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
-CREATE TRIGGER matters_audit BEFORE INSERT OR UPDATE ON app._matters
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.matters
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('matters');
 
 
 -- MATTER STAFF (links firm employees to matters with their staffing role)
@@ -279,9 +407,6 @@ CREATE TABLE app._matter_staff (
         'responsible', 'supervising', 'lead', 'counsel', 'support'
     ))
 );
-CREATE VIEW app.matter_staff WITH (security_invoker = true)
-AS SELECT * FROM app._matter_staff WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._matter_staff(office_id, matter_id) WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matter_staff(office_id, user_id)   WHERE deleted_at IS NULL;
 
@@ -289,11 +414,7 @@ CREATE INDEX ON app._matter_staff(office_id, user_id)   WHERE deleted_at IS NULL
 CREATE UNIQUE INDEX ON app._matter_staff (office_id, matter_id)
   WHERE role = 'responsible' AND deleted_at IS NULL;
 
-CREATE TRIGGER matter_staff_audit BEFORE INSERT OR UPDATE ON app._matter_staff
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.matter_staff
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('matter_staff');
 
 
 -- ENTITIES (universal person/organization registry)
@@ -317,19 +438,13 @@ CREATE TABLE app._entities (
     CONSTRAINT entities_office_uk UNIQUE (office_id, entity_id),
     CONSTRAINT entities_type_check CHECK (entity_type IN ('individual', 'organization'))
 );
-CREATE VIEW app.entities WITH (security_invoker = true)
-AS SELECT * FROM app._entities WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(user_id)                      WHERE user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._entities(email)                        WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(phone)                        WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities USING gin (full_legal_name gin_trgm_ops) WHERE deleted_at IS NULL;
 
-CREATE TRIGGER entities_audit BEFORE INSERT OR UPDATE ON app._entities
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.entities
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('entities');
 
 
 -- ENTITY_ROLES (links entities to matters with their role)
@@ -354,15 +469,9 @@ CREATE TABLE app._entity_roles (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
-CREATE VIEW app.entity_roles WITH (security_invoker = true)
-AS SELECT * FROM app._entity_roles WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS NULL;
 
-CREATE TRIGGER entity_roles_audit BEFORE INSERT OR UPDATE ON app._entity_roles
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.entity_roles
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('entity_roles');
 
 
 -- LEADS (intake pipeline)
@@ -444,19 +553,12 @@ CREATE TABLE app._leads (
         fee_agreement_status IS NULL OR fee_agreement_status IN ('sent', 'accepted', 'declined')
     )
 );
-CREATE VIEW app.leads WITH (security_invoker = true)
-AS SELECT * FROM app._leads WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._leads(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(stage)                           WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._leads(existing_entity_id)              WHERE existing_entity_id IS NOT NULL AND deleted_at IS NULL;
 
-CREATE TRIGGER leads_audit BEFORE INSERT OR UPDATE ON app._leads
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.leads
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('leads');
 
 
 -- Tasks
@@ -490,20 +592,13 @@ CREATE TABLE app._tasks (
         'pending', 'ready', 'active', 'done'
     ))
 );
-CREATE VIEW app.tasks WITH (security_invoker = true)
-AS SELECT * FROM app._tasks WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._tasks(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._tasks(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(lead_id)                         WHERE lead_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(assigned_to)                     WHERE assigned_to IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(status)                          WHERE deleted_at IS NULL;
 
-CREATE TRIGGER tasks_audit BEFORE INSERT OR UPDATE ON app._tasks
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.tasks
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('tasks');
 
 
 -- INVOICES
@@ -537,18 +632,11 @@ CREATE TABLE app._invoices (
         'new', 'approved', 'sent', 'paid', 'closed'
     ))
 );
-CREATE VIEW app.invoices WITH (security_invoker = true)
-AS SELECT * FROM app._invoices WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._invoices(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoices(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoices(status)                       WHERE deleted_at IS NULL;
 
-CREATE TRIGGER invoices_audit BEFORE INSERT OR UPDATE ON app._invoices
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.invoices
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('invoices');
 
 
 -- TIME_ENTRIES
@@ -575,19 +663,12 @@ CREATE TABLE app._time_entries (
 
     CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id)
 );
-CREATE VIEW app.time_entries WITH (security_invoker = true)
-AS SELECT * FROM app._time_entries WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._time_entries(office_id)                WHERE deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(task_id)                  WHERE task_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(user_id)                  WHERE deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(invoice_id)               WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
 
-CREATE TRIGGER time_entries_audit BEFORE INSERT OR UPDATE ON app._time_entries
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.time_entries
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('time_entries');
 
 
 -- EXPENSES
@@ -614,18 +695,11 @@ CREATE TABLE app._expenses (
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
-CREATE VIEW app.expenses WITH (security_invoker = true)
-AS SELECT * FROM app._expenses WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._expenses(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._expenses(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._expenses(invoice_id)                   WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
 
-CREATE TRIGGER expenses_audit BEFORE INSERT OR UPDATE ON app._expenses
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.expenses
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('expenses');
 
 
 -- INVOICE_PAYMENTS
@@ -651,18 +725,11 @@ CREATE TABLE app._invoice_payments (
 
     CONSTRAINT invoice_payments_office_uk UNIQUE (office_id, invoice_payment_id)
 );
-CREATE VIEW app.invoice_payments WITH (security_invoker = true)
-AS SELECT * FROM app._invoice_payments WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._invoice_payments(office_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(invoice_id)           WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(external_id)          WHERE external_id IS NOT NULL AND deleted_at IS NULL;
 
-CREATE TRIGGER invoice_payments_audit BEFORE INSERT OR UPDATE ON app._invoice_payments
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.invoice_payments
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('invoice_payments');
 
 
 -- FORMS
@@ -687,20 +754,13 @@ CREATE TABLE app._forms (
     CONSTRAINT forms_office_uk UNIQUE (office_id, form_id),
     CONSTRAINT forms_status_check CHECK (status IN ('draft', 'submitted', 'reviewed', 'filed'))
 );
-CREATE VIEW app.forms WITH (security_invoker = true)
-AS SELECT * FROM app._forms WHERE deleted_at IS NULL;
-
 CREATE INDEX ON app._forms(form_type)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(entity_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._forms(status)                          WHERE deleted_at IS NULL;
 
-CREATE TRIGGER forms_audit BEFORE INSERT OR UPDATE ON app._forms
-FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields();
-
-CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.forms
-FOR EACH ROW EXECUTE FUNCTION app.prevent_delete();
+SELECT app.setup_table('forms');
 
 
 -- SYSTEM USER SEED

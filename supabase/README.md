@@ -36,18 +36,20 @@ Every active view has an `INSTEAD OF DELETE` trigger that calls `app.prevent_del
 
 ### Audit columns on every table
 
-All business tables carry the same six columns:
+All business tables carry the same six columns, added automatically by `app.setup_table()` via ALTER TABLE:
 
 ```
 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id)
+created_by  UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id)
 updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id)
+updated_by  UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id)
 deleted_at  TIMESTAMPTZ
 deleted_by  UUID REFERENCES app._user_profiles(user_id)
 ```
 
-All six of these columns are maintained automatically by the `app.set_audit_fields()` BEFORE INSERT OR UPDATE trigger on every table. Application code must not set `created_by`, `updated_by`, `created_at`, or `updated_at` itself — the trigger overwrites them. `deleted_by` is auto-filled on soft-delete transitions if the caller sets only `deleted_at`. See the **Attribution** section below for how attribution flows from the application into the trigger.
+These columns never appear in CREATE TABLE statements — `setup_table()` adds them, creates the view, and attaches the triggers in one call. The `app.acting_user_id()` DEFAULT makes the columns optional in TypeScript insert types (`Generated<>` in Kysely codegen / kanel); the BEFORE INSERT trigger still overwrites whatever value the DEFAULT produces, so the DEFAULT is purely for DX.
+
+Application code must not set `created_by`, `updated_by`, `created_at`, or `updated_at` itself — the trigger overwrites them. `deleted_by` is auto-filled on soft-delete transitions if the caller sets only `deleted_at`. See the **Attribution** section below for how attribution flows from the application into the trigger.
 
 ### Tenant safety via composite foreign keys
 
@@ -125,22 +127,13 @@ CREATE TABLE app._foo (
     foo_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
     -- domain columns here
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
     CONSTRAINT foo_office_uk UNIQUE (office_id, foo_id)
 );
-
-CREATE INDEX ON app._foo(office_id) WHERE deleted_at IS NULL;
-
 SELECT app.setup_table('foo');
+CREATE INDEX ON app._foo(office_id) WHERE deleted_at IS NULL;
 ```
 
-`app.setup_table('foo')` creates the active-record view (`app.foo`) and attaches all three standard triggers (audit attribution, delete prevention, audit log) in one call. That's all you need — no manual `CREATE VIEW` or `CREATE TRIGGER` statements.
+`app.setup_table('foo')` adds the six audit / soft-delete columns (via ALTER TABLE), creates the active-record view (`app.foo`), and attaches all three standard triggers (audit attribution, delete prevention, audit log) in one call. Indexes that reference `deleted_at` must come **after** `setup_table` because the column doesn't exist until the ALTER TABLE runs.
 
 If the new table needs tenant-safe FK references from other tables, the composite `(office_id, foo_id)` unique constraint above is what enables them.
 

@@ -1,49 +1,6 @@
 const { makePgTsGenerator } = require("kanel");
 const { makeKyselyHook } = require("kanel-kysely");
 
-const AUDIT_COLUMNS = new Set(["created_by", "updated_by"]);
-
-/**
- * Runs AFTER makeKyselyHook(). The trigger owns created_by / updated_by
- * but the columns have no SQL DEFAULT, so kanel-kysely marks them
- * required on insert. This hook adds `| undefined` to the insert slot.
- */
-function markAuditColumnsGenerated(outputAcc) {
-  let patchCount = 0;
-  for (const file of Object.values(outputAcc)) {
-    const decls = file?.declarations ?? file;
-    if (!Array.isArray(decls)) continue;
-    for (const decl of decls) {
-      if (decl.declarationType !== "interface") continue;
-      for (const prop of decl.properties || []) {
-        if (!AUDIT_COLUMNS.has(prop.name)) continue;
-        if (!prop.typeName.startsWith("ColumnType<")) continue;
-        const open = prop.typeName.indexOf("<");
-        const close = prop.typeName.lastIndexOf(">");
-        const inner = prop.typeName.slice(open + 1, close);
-        const parts = [];
-        let depth = 0;
-        let start = 0;
-        for (let i = 0; i < inner.length; i++) {
-          if (inner[i] === "<") depth++;
-          else if (inner[i] === ">") depth--;
-          else if (inner[i] === "," && depth === 0) {
-            parts.push(inner.slice(start, i).trim());
-            start = i + 1;
-          }
-        }
-        parts.push(inner.slice(start).trim());
-        if (parts.length === 3 && !parts[1].includes("undefined")) {
-          parts[1] = `${parts[1]} | undefined`;
-          prop.typeName = `ColumnType<${parts.join(", ")}>`;
-          patchCount++;
-        }
-      }
-    }
-  }
-  return outputAcc;
-}
-
 /**
  * Our convention: _foo = table, foo = view (active records only).
  * Views are filtered from codegen to avoid duplicate default exports,
@@ -138,8 +95,8 @@ module.exports = {
                 {
                   name: "OfficeRoleConfig",
                   isDefault: false,
-              path: "../../officeRoleConfig",
-              isAbsolute: true,
+                  path: "../../officeRoleConfig",
+                  isAbsolute: true,
                   importAsType: true,
                 },
               ],
@@ -156,7 +113,6 @@ module.exports = {
 
       preRenderHooks: [
         makeKyselyHook(),
-        markAuditColumnsGenerated,
         addViewSchemaEntries,
       ],
     }),

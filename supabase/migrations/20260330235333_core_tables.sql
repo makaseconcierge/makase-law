@@ -81,6 +81,16 @@ BEGIN
 END;
 $$;
 
+-- Column DEFAULT so kysely-codegen / kanel marks created_by / updated_by as
+-- Generated<> (optional on insert). The BEFORE trigger still overwrites the
+-- value; the DEFAULT just makes the column optional in TypeScript insert types.
+-- Evaluates to NULL when the GUC is unset — the trigger fires after DEFAULTs
+-- and will RAISE before the NOT NULL constraint is ever checked.
+CREATE OR REPLACE FUNCTION app.acting_user_id()
+RETURNS uuid LANGUAGE sql STABLE
+SET search_path = ''
+AS $$ SELECT NULLIF(current_setting('app.acting_user_id', true), '')::uuid $$;
+
 CREATE OR REPLACE FUNCTION app.prevent_delete()
 RETURNS trigger LANGUAGE plpgsql
 SET search_path = ''
@@ -90,24 +100,38 @@ BEGIN
 END;
 $$;
 
--- Creates the active-record view and attaches all standard triggers.
+-- Adds the standard audit / soft-delete columns, creates the active-record
+-- view, and attaches all standard triggers.
 -- Call as: SELECT app.setup_table('offices');
--- Expects app._offices to already exist. Creates app.offices (view),
--- then attaches set_audit_fields, prevent_delete, and write_audit_log.
+-- Expects app._offices to already exist with only domain columns.
+-- Indexes that reference deleted_at must come AFTER this call.
 CREATE OR REPLACE FUNCTION app.setup_table(base_name TEXT)
 RETURNS void LANGUAGE plpgsql
 SET search_path = ''
 AS $$
+DECLARE
+  tbl TEXT := '_' || base_name;
 BEGIN
+  EXECUTE format(
+    'ALTER TABLE app.%I '
+    'ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), '
+    'ADD COLUMN created_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id), '
+    'ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), '
+    'ADD COLUMN updated_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id), '
+    'ADD COLUMN deleted_at TIMESTAMPTZ, '
+    'ADD COLUMN deleted_by UUID REFERENCES app._user_profiles(user_id), '
+    'ADD CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))',
+    tbl
+  );
   EXECUTE format(
     'CREATE VIEW app.%I WITH (security_invoker = true) '
     'AS SELECT * FROM app.%I WHERE deleted_at IS NULL',
-    base_name, '_' || base_name
+    base_name, tbl
   );
   EXECUTE format(
     'CREATE TRIGGER %I_audit BEFORE INSERT OR UPDATE ON app.%I '
     'FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields()',
-    base_name, '_' || base_name
+    base_name, tbl
   );
   EXECUTE format(
     'CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.%I '
@@ -117,7 +141,7 @@ BEGIN
   EXECUTE format(
     'CREATE TRIGGER %I_log AFTER INSERT OR UPDATE OR DELETE ON app.%I '
     'FOR EACH ROW EXECUTE FUNCTION app.write_audit_log()',
-    '_' || base_name, '_' || base_name
+    tbl, tbl
   );
 END;
 $$;
@@ -218,14 +242,7 @@ CREATE TABLE app._user_profiles (
     user_id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE NO ACTION,
     display_name    TEXT NOT NULL,
     email           TEXT NOT NULL UNIQUE,
-    phone           TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at      TIMESTAMPTZ,
-    deleted_by      UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+    phone           TEXT
 );
 SELECT app.setup_table('user_profiles');
 
@@ -310,14 +327,7 @@ CREATE TABLE app._offices (
     email       TEXT,
     website     TEXT,
     logo        TEXT,
-    role_config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+    role_config JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 SELECT app.setup_table('offices');
 
@@ -329,19 +339,10 @@ CREATE TABLE app._employees (
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
     dashboard_roles     TEXT[] NOT NULL DEFAULT '{}',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by          UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by          UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at          TIMESTAMPTZ,
-    deleted_by          UUID REFERENCES app._user_profiles(user_id),
-
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
     PRIMARY KEY (office_id, user_id)
 );
-CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
-
 SELECT app.setup_table('employees');
+CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
 
 
 -- MATTERS
@@ -364,13 +365,6 @@ CREATE TABLE app._matters (
     data        JSONB NOT NULL DEFAULT '{}'::jsonb,
     archived_at                  TIMESTAMPTZ,
     archived_by                  UUID REFERENCES app._user_profiles(user_id),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)), 
 
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
     CONSTRAINT matters_billing_type_check CHECK (billing_type IN (
@@ -380,10 +374,9 @@ CREATE TABLE app._matters (
         'consultation', 'setup', 'active', 'closed', 'archived'
     ))
 );
+SELECT app.setup_table('matters');
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
-
-SELECT app.setup_table('matters');
 
 
 -- MATTER STAFF (links firm employees to matters with their staffing role)
@@ -394,27 +387,19 @@ CREATE TABLE app._matter_staff (
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     FOREIGN KEY (office_id, user_id)   REFERENCES app._employees(office_id, user_id),
     role        TEXT NOT NULL DEFAULT 'support',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     PRIMARY KEY (office_id, matter_id, user_id, role),
     CONSTRAINT matter_staff_role_check CHECK (role IN (
         'responsible', 'supervising', 'lead', 'counsel', 'support'
     ))
 );
+SELECT app.setup_table('matter_staff');
 CREATE INDEX ON app._matter_staff(office_id, matter_id) WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matter_staff(office_id, user_id)   WHERE deleted_at IS NULL;
 
 -- Enforce exactly one 'responsible' attorney per active matter
 CREATE UNIQUE INDEX ON app._matter_staff (office_id, matter_id)
   WHERE role = 'responsible' AND deleted_at IS NULL;
-
-SELECT app.setup_table('matter_staff');
 
 
 -- ENTITIES (universal person/organization registry)
@@ -427,24 +412,16 @@ CREATE TABLE app._entities (
     phone           TEXT,
     entity_type     TEXT NOT NULL DEFAULT 'individual',
     metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at      TIMESTAMPTZ,
-    deleted_by      UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT entities_office_uk UNIQUE (office_id, entity_id),
     CONSTRAINT entities_type_check CHECK (entity_type IN ('individual', 'organization'))
 );
+SELECT app.setup_table('entities');
 CREATE INDEX ON app._entities(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(user_id)                      WHERE user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._entities(email)                        WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(phone)                        WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities USING gin (full_legal_name gin_trgm_ops) WHERE deleted_at IS NULL;
-
-SELECT app.setup_table('entities');
 
 
 -- ENTITY_ROLES (links entities to matters with their role)
@@ -455,13 +432,6 @@ CREATE TABLE app._entity_roles (
     matter_id   UUID NOT NULL,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     role        TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     PRIMARY KEY (office_id, entity_id, matter_id, role),
     CONSTRAINT entity_roles_unique UNIQUE (entity_id, matter_id, role),
@@ -469,9 +439,8 @@ CREATE TABLE app._entity_roles (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
-CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS NULL;
-
 SELECT app.setup_table('entity_roles');
+CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS NULL;
 
 
 -- LEADS (intake pipeline)
@@ -521,14 +490,6 @@ CREATE TABLE app._leads (
     matter_id                       UUID,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
 
-    created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by                      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by                      UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at                      TIMESTAMPTZ,
-    deleted_by                      UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
-
     CONSTRAINT leads_office_uk UNIQUE (office_id, lead_id),
 
     CONSTRAINT leads_stage_check CHECK (stage IN (
@@ -553,12 +514,11 @@ CREATE TABLE app._leads (
         fee_agreement_status IS NULL OR fee_agreement_status IN ('sent', 'accepted', 'declined')
     )
 );
+SELECT app.setup_table('leads');
 CREATE INDEX ON app._leads(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(stage)                           WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._leads(existing_entity_id)              WHERE existing_entity_id IS NOT NULL AND deleted_at IS NULL;
-
-SELECT app.setup_table('leads');
 
 
 -- Tasks
@@ -579,26 +539,17 @@ CREATE TABLE app._tasks (
     billable BOOLEAN NOT NULL DEFAULT FALSE,
     no_charge BOOLEAN NOT NULL DEFAULT FALSE,
 
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
-
     CONSTRAINT tasks_office_uk UNIQUE (office_id, task_id),
     CONSTRAINT tasks_status_check CHECK (status IN (
         'pending', 'ready', 'active', 'done'
     ))
 );
+SELECT app.setup_table('tasks');
 CREATE INDEX ON app._tasks(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._tasks(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(lead_id)                         WHERE lead_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(assigned_to)                     WHERE assigned_to IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(status)                          WHERE deleted_at IS NULL;
-
-SELECT app.setup_table('tasks');
 
 
 -- INVOICES
@@ -617,13 +568,6 @@ CREATE TABLE app._invoices (
     total_amount NUMERIC NOT NULL DEFAULT 0, -- billed_amount + late_fee_amount
 
     -- total_paid from payments table
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT invoices_late_fee_amount_check CHECK (late_fee_amount >= 0),
     CONSTRAINT invoices_total_amount_check CHECK (total_amount >= 0),
@@ -632,11 +576,10 @@ CREATE TABLE app._invoices (
         'new', 'approved', 'sent', 'paid', 'closed'
     ))
 );
+SELECT app.setup_table('invoices');
 CREATE INDEX ON app._invoices(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoices(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoices(status)                       WHERE deleted_at IS NULL;
-
-SELECT app.setup_table('invoices');
 
 
 -- TIME_ENTRIES
@@ -653,22 +596,14 @@ CREATE TABLE app._time_entries (
     actual_duration   INTEGER NOT NULL,
     billable_duration INTEGER NOT NULL,
     description       TEXT,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by        UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by        UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at        TIMESTAMPTZ,
-    deleted_by        UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id)
 );
+SELECT app.setup_table('time_entries');
 CREATE INDEX ON app._time_entries(office_id)                WHERE deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(task_id)                  WHERE task_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(user_id)                  WHERE deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(invoice_id)               WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
-
-SELECT app.setup_table('time_entries');
 
 
 -- EXPENSES
@@ -685,21 +620,13 @@ CREATE TABLE app._expenses (
     is_billable BOOLEAN NOT NULL DEFAULT TRUE,
     receipt_path TEXT[] NOT NULL DEFAULT '{}',
     external_invoice_data JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
+SELECT app.setup_table('expenses');
 CREATE INDEX ON app._expenses(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._expenses(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._expenses(invoice_id)                   WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
-
-SELECT app.setup_table('expenses');
 
 
 -- INVOICE_PAYMENTS
@@ -715,21 +642,13 @@ CREATE TABLE app._invoice_payments (
     external_type TEXT,
     external_url TEXT,
     external_data JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT invoice_payments_office_uk UNIQUE (office_id, invoice_payment_id)
 );
+SELECT app.setup_table('invoice_payments');
 CREATE INDEX ON app._invoice_payments(office_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(invoice_id)           WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(external_id)          WHERE external_id IS NOT NULL AND deleted_at IS NULL;
-
-SELECT app.setup_table('invoice_payments');
 
 
 -- FORMS
@@ -743,24 +662,16 @@ CREATE TABLE app._forms (
     form_type   TEXT NOT NULL,
     form_data   JSONB NOT NULL DEFAULT '{}'::jsonb,
     status      TEXT NOT NULL DEFAULT 'submitted',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by  UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID REFERENCES app._user_profiles(user_id),
-    CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
 
     CONSTRAINT forms_office_uk UNIQUE (office_id, form_id),
     CONSTRAINT forms_status_check CHECK (status IN ('draft', 'submitted', 'reviewed', 'filed'))
 );
+SELECT app.setup_table('forms');
 CREATE INDEX ON app._forms(form_type)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(entity_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._forms(status)                          WHERE deleted_at IS NULL;
-
-SELECT app.setup_table('forms');
 
 
 -- SYSTEM USER SEED

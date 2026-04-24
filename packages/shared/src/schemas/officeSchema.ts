@@ -17,8 +17,8 @@ export const OfficePatchSchema = z
     name: z.string().min(1).max(200).optional(),
     address: JsonObjectSchema.optional(),
     phone: z.string().nullable().optional(),
-    email: z.string().email().nullable().optional(),
-    website: z.string().url().nullable().optional(),
+    email: z.email().nullable().optional(),
+    website: z.url().nullable().optional(),
     logo: z.string().nullable().optional(),
     role_config: z.record(z.string(), z.array(z.string())).optional(),
   })

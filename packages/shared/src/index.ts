@@ -1,10 +1,10 @@
-export { rootDb, getDb } from "./dbClient";
+export { rootDb, getDb } from "./db/dbClient";
 export {
   runAs,
   runAsSystem,
   getActingUserId,
   SYSTEM_USER_ID,
-} from "./runAs";
+} from "./db/runAs";
 export * as matters from "./services/matterService";
 export * as offices from "./services/officeService";
 export * as employees from "./services/employeeService";

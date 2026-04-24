@@ -5,6 +5,7 @@ import { authenticate } from "./src/middleware/authenticate";
 import { withTx } from "./src/middleware/withTx";
 import userRoutes from "./src/routes/user";
 import type { AppEnv } from "./src/honoEnv";
+import "./src/logger";
 
 const app = new Hono<AppEnv>();
 

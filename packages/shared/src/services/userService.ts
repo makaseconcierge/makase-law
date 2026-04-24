@@ -1,6 +1,10 @@
-import { getDb } from "../dbClient";
+import { getDb } from "../db/dbClient";
+import { getLogger } from "@logtape/logtape";
+
+let logger = getLogger(["userService"]);
 
 export async function listOffices(user_id: string) {
+  logger.trace("Listing offices", { user_id });
   return getDb()
     .selectFrom("employees")
     .where("employees.user_id", "=", user_id)
@@ -11,6 +15,7 @@ export async function listOffices(user_id: string) {
 }
 
 export async function getProfile(user_id: string) {
+  logger.trace("Getting profile", { user_id });
   return getDb()
     .selectFrom("user_profiles")
     .selectAll()
@@ -19,6 +24,7 @@ export async function getProfile(user_id: string) {
 }
 
 export async function getWithOffices(user_id: string) {
+  logger.trace("Getting profile with offices", { user_id });
   const [user, offices] = await Promise.all([
     getProfile(user_id),
     listOffices(user_id),

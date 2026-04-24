@@ -1,6 +1,7 @@
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { OfficesOfficeId } from './Offices.js';
 import type { JsonValue } from '../../jsonTypes.js';
+import type { PositionsKey } from './Positions.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Represents the table app._employees */
@@ -13,7 +14,9 @@ export default interface EmployeesTable {
 
   bar_numbers: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 
-  dashboard_roles: ColumnType<string[], string[] | undefined, string[]>;
+  position: ColumnType<PositionsKey, PositionsKey, PositionsKey>;
+
+  functional_roles: ColumnType<string[], string[] | undefined, string[]>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

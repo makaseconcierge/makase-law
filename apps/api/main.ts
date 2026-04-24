@@ -1,3 +1,4 @@
+import "./src/logger";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import officeRoutes from "./src/routes/office";
@@ -5,7 +6,6 @@ import { authenticate } from "./src/middleware/authenticate";
 import { withTx } from "./src/middleware/withTx";
 import userRoutes from "./src/routes/user";
 import type { AppEnv } from "./src/honoEnv";
-import "./src/logger";
 
 const app = new Hono<AppEnv>();
 

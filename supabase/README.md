@@ -67,7 +67,7 @@ Because reads happen through the active view, partial indexes matching the view'
 
 - **`auth.users`** is Supabase-managed. It owns login, sessions, email verification, etc. You do not write to it directly.
 - **`app._user_profiles`** is a 1:1 mirror keyed by `user_id = auth.users.id`. It owns user-editable display data (`display_name`, optional personal `phone`) and is the FK target for every `created_by` / `updated_by` / `deleted_by` across the schema. It persists even if a user ever leaves, so historical authorship always resolves.
-- **`app._employees`** is `(office_id, user_id)`-keyed and owns **firm-controlled** identity data: `full_legal_name` (the name that appears on engagement letters and filings), `bar_numbers` (JSONB array of `{state, number}`), `dashboard_roles`. A user can be an employee at multiple offices by having multiple rows.
+- **`app._employees`** is `(office_id, user_id)`-keyed and owns **firm-controlled** identity data: `full_legal_name` (the name that appears on engagement letters and filings), `bar_numbers` (JSONB array of `{state, number}`), `functional_roles`. A user can be an employee at multiple offices by having multiple rows.
 - **`app._entities`** is the registry of external people and organizations (clients, opposing parties, witnesses, experts, external attorneys). Each entity is scoped to one office.
 
 The split between `_user_profiles.display_name` and `_employees.full_legal_name` is deliberate:

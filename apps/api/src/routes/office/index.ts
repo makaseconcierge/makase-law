@@ -4,6 +4,7 @@ import { employees, offices } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
 import officeInfoRoutes from "./officeInfoRoutes";
 import matterRoutes from "./matterRoutes";
+import {  } from "@logtape/logtape";
 
 
 const authorizeEmployee: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -22,7 +23,7 @@ const authorizeEmployee: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   const permissions: string[] = [];
-  employee.dashboard_roles.forEach((role) => {
+  employee.functional_roles.forEach((role) => {
     let rolePermissions = office.role_config[role] as string[];
     permissions.push(...rolePermissions);
   });

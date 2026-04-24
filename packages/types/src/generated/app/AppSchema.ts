@@ -6,6 +6,7 @@ import type { default as EmployeesTable } from './Employees.js';
 import type { default as InvoicePaymentsTable } from './InvoicePayments.js';
 import type { default as InvoicesTable } from './Invoices.js';
 import type { default as TasksTable } from './Tasks.js';
+import type { default as PositionsTable } from './Positions.js';
 import type { default as OfficesTable } from './Offices.js';
 import type { default as TimeEntriesTable } from './TimeEntries.js';
 import type { default as EntityRolesTable } from './EntityRoles.js';
@@ -30,6 +31,8 @@ export default interface AppSchema {
   _invoices: InvoicesTable;
 
   _tasks: TasksTable;
+
+  positions: PositionsTable;
 
   _offices: OfficesTable;
 

@@ -5,7 +5,7 @@ import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app._entity_roles */
-export type EntityRolesRole = string;
+export type EntityRolesMatterRole = string;
 
 /** Represents the table app._entity_roles */
 export default interface EntityRolesTable {
@@ -15,7 +15,7 @@ export default interface EntityRolesTable {
 
   matter_id: ColumnType<MattersMatterId, MattersMatterId, MattersMatterId>;
 
-  role: ColumnType<EntityRolesRole, EntityRolesRole, EntityRolesRole>;
+  matter_role: ColumnType<EntityRolesMatterRole, EntityRolesMatterRole, EntityRolesMatterRole>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

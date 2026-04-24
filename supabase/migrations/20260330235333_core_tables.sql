@@ -102,10 +102,10 @@ $$;
 
 -- Adds the standard audit / soft-delete columns, creates the active-record
 -- view, and attaches all standard triggers.
--- Call as: SELECT app.setup_table('offices');
+-- Call as: SELECT app.setup_auditable_table('offices');
 -- Expects app._offices to already exist with only domain columns.
 -- Indexes that reference deleted_at must come AFTER this call.
-CREATE OR REPLACE FUNCTION app.setup_table(base_name TEXT)
+CREATE OR REPLACE FUNCTION app.setup_auditable_table(base_name TEXT)
 RETURNS void LANGUAGE plpgsql
 SET search_path = ''
 AS $$
@@ -244,7 +244,7 @@ CREATE TABLE app._user_profiles (
     email           TEXT NOT NULL UNIQUE,
     phone           TEXT
 );
-SELECT app.setup_table('user_profiles');
+SELECT app.setup_auditable_table('user_profiles');
 
 -- Auth-triggered writes to app._user_profiles set app.acting_user_id to
 -- the user themselves so the audit trigger attributes the row correctly.
@@ -329,8 +329,17 @@ CREATE TABLE app._offices (
     logo        TEXT,
     role_config JSONB NOT NULL DEFAULT '{}'::jsonb
 );
-SELECT app.setup_table('offices');
+SELECT app.setup_auditable_table('offices');
 
+
+-- POSITIONS
+CREATE TABLE app.positions (
+    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    PRIMARY KEY (office_id, key)
+);
 
 -- EMPLOYEES
 CREATE TABLE app._employees (
@@ -338,10 +347,12 @@ CREATE TABLE app._employees (
     office_id           UUID NOT NULL REFERENCES app._offices(office_id),
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
-    dashboard_roles     TEXT[] NOT NULL DEFAULT '{}',
+    position            TEXT NOT NULL,
+    FOREIGN KEY (office_id, position) REFERENCES app.positions(office_id, key),
+    functional_roles     TEXT[] NOT NULL DEFAULT '{}', -- default based on position and office role_config
     PRIMARY KEY (office_id, user_id)
 );
-SELECT app.setup_table('employees');
+SELECT app.setup_auditable_table('employees');
 CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
 
 
@@ -374,32 +385,32 @@ CREATE TABLE app._matters (
         'consultation', 'setup', 'active', 'closed', 'archived'
     ))
 );
-SELECT app.setup_table('matters');
+SELECT app.setup_auditable_table('matters');
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
 
--- MATTER STAFF (links firm employees to matters with their staffing role)
+-- MATTER STAFF (links firm employees to matters with their staffing matter_role)
 CREATE TABLE app._matter_staff (
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
     matter_id   UUID NOT NULL,
     user_id     UUID NOT NULL,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     FOREIGN KEY (office_id, user_id)   REFERENCES app._employees(office_id, user_id),
-    role        TEXT NOT NULL DEFAULT 'support',
+    matter_role        TEXT NOT NULL DEFAULT 'support',
 
-    PRIMARY KEY (office_id, matter_id, user_id, role),
-    CONSTRAINT matter_staff_role_check CHECK (role IN (
-        'responsible', 'supervising', 'lead', 'counsel', 'support'
+    PRIMARY KEY (office_id, matter_id, user_id, matter_role),
+    CONSTRAINT matter_staff_role_check CHECK (matter_role IN (
+        'responsible_attorney', 'supervising_attorney', 'lead_paralegal', 'counsel', 'support'
     ))
 );
-SELECT app.setup_table('matter_staff');
+SELECT app.setup_auditable_table('matter_staff');
 CREATE INDEX ON app._matter_staff(office_id, matter_id) WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matter_staff(office_id, user_id)   WHERE deleted_at IS NULL;
 
 -- Enforce exactly one 'responsible' attorney per active matter
 CREATE UNIQUE INDEX ON app._matter_staff (office_id, matter_id)
-  WHERE role = 'responsible' AND deleted_at IS NULL;
+  WHERE matter_role = 'responsible_attorney' AND deleted_at IS NULL;
 
 
 -- ENTITIES (universal person/organization registry)
@@ -416,7 +427,7 @@ CREATE TABLE app._entities (
     CONSTRAINT entities_office_uk UNIQUE (office_id, entity_id),
     CONSTRAINT entities_type_check CHECK (entity_type IN ('individual', 'organization'))
 );
-SELECT app.setup_table('entities');
+SELECT app.setup_auditable_table('entities');
 CREATE INDEX ON app._entities(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._entities(user_id)                      WHERE user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._entities(email)                        WHERE deleted_at IS NULL;
@@ -424,22 +435,22 @@ CREATE INDEX ON app._entities(phone)                        WHERE deleted_at IS 
 CREATE INDEX ON app._entities USING gin (full_legal_name gin_trgm_ops) WHERE deleted_at IS NULL;
 
 
--- ENTITY_ROLES (links entities to matters with their role)
+-- ENTITY_ROLES (links entities to matters with their matter_role)
 CREATE TABLE app._entity_roles (
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
     entity_id   UUID NOT NULL,
     FOREIGN KEY (office_id, entity_id) REFERENCES app._entities(office_id, entity_id),
     matter_id   UUID NOT NULL,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
-    role        TEXT NOT NULL,
+    matter_role        TEXT NOT NULL,
 
-    PRIMARY KEY (office_id, entity_id, matter_id, role),
-    CONSTRAINT entity_roles_unique UNIQUE (entity_id, matter_id, role),
-    CONSTRAINT entity_roles_role_check CHECK (role IN (
+    PRIMARY KEY (office_id, entity_id, matter_id, matter_role),
+    CONSTRAINT entity_roles_unique UNIQUE (entity_id, matter_id, matter_role),
+    CONSTRAINT entity_roles_role_check CHECK (matter_role IN (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
-SELECT app.setup_table('entity_roles');
+SELECT app.setup_auditable_table('entity_roles');
 CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS NULL;
 
 
@@ -514,7 +525,7 @@ CREATE TABLE app._leads (
         fee_agreement_status IS NULL OR fee_agreement_status IN ('sent', 'accepted', 'declined')
     )
 );
-SELECT app.setup_table('leads');
+SELECT app.setup_auditable_table('leads');
 CREATE INDEX ON app._leads(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(stage)                           WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL AND deleted_at IS NULL;
@@ -544,7 +555,7 @@ CREATE TABLE app._tasks (
         'pending', 'ready', 'active', 'done'
     ))
 );
-SELECT app.setup_table('tasks');
+SELECT app.setup_auditable_table('tasks');
 CREATE INDEX ON app._tasks(office_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._tasks(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(lead_id)                         WHERE lead_id IS NOT NULL AND deleted_at IS NULL;
@@ -576,7 +587,7 @@ CREATE TABLE app._invoices (
         'new', 'approved', 'sent', 'paid', 'closed'
     ))
 );
-SELECT app.setup_table('invoices');
+SELECT app.setup_auditable_table('invoices');
 CREATE INDEX ON app._invoices(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoices(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoices(status)                       WHERE deleted_at IS NULL;
@@ -599,7 +610,7 @@ CREATE TABLE app._time_entries (
 
     CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id)
 );
-SELECT app.setup_table('time_entries');
+SELECT app.setup_auditable_table('time_entries');
 CREATE INDEX ON app._time_entries(office_id)                WHERE deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(task_id)                  WHERE task_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._time_entries(user_id)                  WHERE deleted_at IS NULL;
@@ -623,7 +634,7 @@ CREATE TABLE app._expenses (
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
-SELECT app.setup_table('expenses');
+SELECT app.setup_auditable_table('expenses');
 CREATE INDEX ON app._expenses(office_id)                    WHERE deleted_at IS NULL;
 CREATE INDEX ON app._expenses(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._expenses(invoice_id)                   WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
@@ -645,7 +656,7 @@ CREATE TABLE app._invoice_payments (
 
     CONSTRAINT invoice_payments_office_uk UNIQUE (office_id, invoice_payment_id)
 );
-SELECT app.setup_table('invoice_payments');
+SELECT app.setup_auditable_table('invoice_payments');
 CREATE INDEX ON app._invoice_payments(office_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(invoice_id)           WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoice_payments(external_id)          WHERE external_id IS NOT NULL AND deleted_at IS NULL;
@@ -666,7 +677,7 @@ CREATE TABLE app._forms (
     CONSTRAINT forms_office_uk UNIQUE (office_id, form_id),
     CONSTRAINT forms_status_check CHECK (status IN ('draft', 'submitted', 'reviewed', 'filed'))
 );
-SELECT app.setup_table('forms');
+SELECT app.setup_auditable_table('forms');
 CREATE INDEX ON app._forms(form_type)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(entity_id)                       WHERE deleted_at IS NULL;
 CREATE INDEX ON app._forms(office_id)                       WHERE deleted_at IS NULL;

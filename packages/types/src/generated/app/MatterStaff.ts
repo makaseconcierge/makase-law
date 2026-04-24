@@ -4,7 +4,7 @@ import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app._matter_staff */
-export type MatterStaffRole = string;
+export type MatterStaffMatterRole = string;
 
 /** Represents the table app._matter_staff */
 export default interface MatterStaffTable {
@@ -14,7 +14,7 @@ export default interface MatterStaffTable {
 
   user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
 
-  role: ColumnType<MatterStaffRole, MatterStaffRole | undefined, MatterStaffRole>;
+  matter_role: ColumnType<MatterStaffMatterRole, MatterStaffMatterRole | undefined, MatterStaffMatterRole>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

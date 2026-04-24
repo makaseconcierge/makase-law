@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
+    "@logtape/logtape": "^2.0.5",
     "@makase-law/shared": "workspace:*",
     "@makase-law/types": "workspace:*",
     "@supabase/supabase-js": "^2.49.1",

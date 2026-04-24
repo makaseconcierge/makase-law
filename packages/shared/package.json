@@ -11,8 +11,9 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@makase-law/types": "workspace:*",
-    "kysely-postgres-js": "^3.0.0",
-    "zod": "^4.3.6"
+    "@logtape/logtape": "catalog:",
+    "zod": "catalog:",
+    "kysely-postgres-js": "^3.0.0"
   },
   "peerDependencies": {
     "kysely": "^0.28.15"

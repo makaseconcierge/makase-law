@@ -362,8 +362,8 @@ CREATE TABLE app._team_roles (
     team_role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id UUID NOT NULL REFERENCES app._offices(office_id),
     name TEXT NOT NULL,
-    description TEXT NOT NULL
-    role_config JSONB NOT NULL DEFAULT '{}'::jsonb -- defines permissions for team owned resources {matter: {read: boolean, write: boolean}, tasks: {read: boolean, write: boolean}...}
+    description TEXT NOT NULL,
+    role_config JSONB NOT NULL DEFAULT '{}'::jsonb, -- defines permissions for team owned resources {matter: {read: boolean, write: boolean}, tasks: {read: boolean, write: boolean}...}
     CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
 );
 SELECT app.setup_auditable_table('team_roles');
@@ -413,6 +413,7 @@ CREATE TABLE app._matters (
     archived_by                  UUID REFERENCES app._user_profiles(user_id),
 
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
+    CONSTRAINT matters_team_uk UNIQUE (office_id, matter_id, team_id),
     CONSTRAINT matters_billing_type_check CHECK (billing_type IN (
         'active', 'active_deferred', 'contingency', 'flat_fee', 'flat_fee_plus_hourly'
     )),
@@ -540,6 +541,7 @@ CREATE TABLE app._leads (
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
 
     CONSTRAINT leads_office_uk UNIQUE (office_id, lead_id),
+    CONSTRAINT leads_team_uk UNIQUE (office_id, lead_id, team_id),
 
     CONSTRAINT leads_stage_check CHECK (stage IN (
         'collect_contact_info',
@@ -572,17 +574,17 @@ CREATE INDEX ON app._leads(existing_entity_id)              WHERE existing_entit
 
 
 -- Tasks
--- team_id must match the parent matter's or lead's team_id when those are set.
--- Enforced in application code, not the DB (cross-table check would need a trigger).
+-- team_id consistency with parent matter/lead is enforced by the composite FKs below
+-- (MATCH SIMPLE: FK is skipped when matter_id/lead_id is NULL, enforced when set).
 CREATE TABLE app._tasks (
     task_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
     matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
     lead_id     UUID,
-    FOREIGN KEY (office_id, lead_id) REFERENCES app._leads(office_id, lead_id),
+    FOREIGN KEY (office_id, lead_id, team_id) REFERENCES app._leads(office_id, lead_id, team_id),
     assigned_to UUID,
     FOREIGN KEY (office_id, assigned_to) REFERENCES app._employees(office_id, user_id),
     name        TEXT NOT NULL,
@@ -614,7 +616,7 @@ CREATE TABLE app._invoices (
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
     matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
     status      TEXT NOT NULL DEFAULT 'new',
     notes       TEXT,
     due_date    TIMESTAMPTZ,

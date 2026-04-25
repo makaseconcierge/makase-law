@@ -1,19 +1,22 @@
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { OfficesOfficeId } from './Offices.js';
 import type { JsonValue } from '../../jsonTypes.js';
+import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Represents the table app._employees */
-export default interface EmployeesTable {
-  user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+/** Identifier type for app._team_roles */
+export type TeamRolesTeamRoleId = string;
+
+/** Represents the table app._team_roles */
+export default interface TeamRolesTable {
+  team_role_id: ColumnType<TeamRolesTeamRoleId, TeamRolesTeamRoleId | undefined, TeamRolesTeamRoleId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
-  full_legal_name: ColumnType<string, string, string>;
+  name: ColumnType<string, string, string>;
 
-  bar_numbers: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
+  description: ColumnType<string, string, string>;
 
-  is_admin: ColumnType<boolean, boolean | undefined, boolean>;
+  role_config: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -28,8 +31,8 @@ export default interface EmployeesTable {
   deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
-export type Employees = Selectable<EmployeesTable>;
+export type TeamRoles = Selectable<TeamRolesTable>;
 
-export type NewEmployees = Insertable<EmployeesTable>;
+export type NewTeamRoles = Insertable<TeamRolesTable>;
 
-export type EmployeesUpdate = Updateable<EmployeesTable>;
+export type TeamRolesUpdate = Updateable<TeamRolesTable>;

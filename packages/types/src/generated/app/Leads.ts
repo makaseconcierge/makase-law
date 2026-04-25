@@ -1,4 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { TeamsTeamId } from './Teams.js';
 import type { JsonValue } from '../../jsonTypes.js';
 import type { EntitiesEntityId } from './Entities.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
@@ -13,6 +14,8 @@ export default interface LeadsTable {
   lead_id: ColumnType<LeadsLeadId, LeadsLeadId | undefined, LeadsLeadId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
+
+  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
   full_legal_name: ColumnType<string | null, string | null, string | null>;
 

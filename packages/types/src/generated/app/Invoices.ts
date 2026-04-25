@@ -1,4 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { TeamsTeamId } from './Teams.js';
 import type { MattersMatterId } from './Matters.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
@@ -11,6 +12,8 @@ export default interface InvoicesTable {
   invoice_id: ColumnType<InvoicesInvoiceId, InvoicesInvoiceId | undefined, InvoicesInvoiceId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
+
+  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
   matter_id: ColumnType<MattersMatterId | null, MattersMatterId | null, MattersMatterId | null>;
 

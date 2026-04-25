@@ -1,5 +1,4 @@
 import type { JsonValue } from '../../jsonTypes.js';
-import type { OfficeRoleConfig } from '../../officeRoleConfig.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
@@ -21,8 +20,6 @@ export default interface OfficesTable {
   website: ColumnType<string | null, string | null, string | null>;
 
   logo: ColumnType<string | null, string | null, string | null>;
-
-  role_config: ColumnType<OfficeRoleConfig, OfficeRoleConfig | undefined, OfficeRoleConfig>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

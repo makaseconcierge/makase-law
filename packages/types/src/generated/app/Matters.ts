@@ -1,4 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { TeamsTeamId } from './Teams.js';
 import type { JsonValue } from '../../jsonTypes.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
@@ -11,6 +12,8 @@ export default interface MattersTable {
   matter_id: ColumnType<MattersMatterId, MattersMatterId | undefined, MattersMatterId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
+
+  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
   title: ColumnType<string, string, string>;
 

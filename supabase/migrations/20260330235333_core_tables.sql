@@ -318,6 +318,7 @@ REVOKE ALL ON app.audit_log FROM PUBLIC, service_role;
 GRANT SELECT ON app.audit_log TO service_role;
 
 
+
 -- OFFICES
 CREATE TABLE app._offices (
     office_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -326,20 +327,10 @@ CREATE TABLE app._offices (
     phone       TEXT,
     email       TEXT,
     website     TEXT,
-    logo        TEXT,
-    role_config JSONB NOT NULL DEFAULT '{}'::jsonb
+    logo        TEXT
 );
 SELECT app.setup_auditable_table('offices');
 
-
--- POSITIONS
-CREATE TABLE app.positions (
-    office_id UUID NOT NULL REFERENCES app._offices(office_id),
-    key TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    PRIMARY KEY (office_id, key)
-);
 
 -- EMPLOYEES
 CREATE TABLE app._employees (
@@ -347,22 +338,66 @@ CREATE TABLE app._employees (
     office_id           UUID NOT NULL REFERENCES app._offices(office_id),
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
-    position            TEXT NOT NULL,
-    FOREIGN KEY (office_id, position) REFERENCES app.positions(office_id, key),
-    functional_roles     TEXT[] NOT NULL DEFAULT '{}', -- default based on position and office role_config
+    is_admin            BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (office_id, user_id)
 );
 SELECT app.setup_auditable_table('employees');
 CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
 
 
+-- TEAMS
+CREATE TABLE app._teams (
+    team_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    CONSTRAINT teams_office_uk UNIQUE (office_id, team_id)
+);
+SELECT app.setup_auditable_table('teams');
+CREATE INDEX ON app._teams(office_id) WHERE deleted_at IS NULL;
+
+
+-- team_roles
+CREATE TABLE app._team_roles (
+    team_role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL
+    role_config JSONB NOT NULL DEFAULT '{}'::jsonb -- defines permissions for team owned resources {matter: {read: boolean, write: boolean}, tasks: {read: boolean, write: boolean}...}
+    CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
+);
+SELECT app.setup_auditable_table('team_roles');
+CREATE INDEX ON app._team_roles(office_id) WHERE deleted_at IS NULL;
+
+
+-- TEAM_MEMBER_ROLES
+CREATE TABLE app._team_member_roles (
+    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    team_id UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    user_id UUID NOT NULL,
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
+    team_role_id UUID NOT NULL,
+    FOREIGN KEY (office_id, team_role_id) REFERENCES app._team_roles(office_id, team_role_id),
+    functional_roles TEXT[] NOT NULL DEFAULT '{}', -- based on position role_config and is_supervisor and is_manager
+    PRIMARY KEY (office_id, team_id, user_id, team_role_id)
+);
+SELECT app.setup_auditable_table('team_member_roles');
+CREATE INDEX ON app._team_member_roles(office_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._team_member_roles(office_id, team_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._team_member_roles(office_id, user_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._team_member_roles(office_id, team_id, team_role_id) WHERE deleted_at IS NULL;
+
+
 -- MATTERS
 CREATE TABLE app._matters (
-    matter_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    matter_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    team_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    stage      TEXT NOT NULL DEFAULT 'consultation',
+    stage       TEXT NOT NULL DEFAULT 'consultation',
     type        TEXT NOT NULL DEFAULT 'general',
     billing_type TEXT NOT NULL DEFAULT 'active',
     billing_settings JSONB NOT NULL DEFAULT '{}'::jsonb, -- need these here because they could change in settings but once contract is signed they are locked in
@@ -387,6 +422,7 @@ CREATE TABLE app._matters (
 );
 SELECT app.setup_auditable_table('matters');
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
+CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
 
@@ -401,7 +437,7 @@ CREATE TABLE app._matter_staff (
 
     PRIMARY KEY (office_id, matter_id, user_id, matter_role),
     CONSTRAINT matter_staff_role_check CHECK (matter_role IN (
-        'responsible_attorney', 'supervising_attorney', 'lead_paralegal', 'counsel', 'support'
+        'responsible_attorney', 'supervising_attorney', 'counsel', 'paralegal', 'support'
     ))
 );
 SELECT app.setup_auditable_table('matter_staff');
@@ -458,6 +494,8 @@ CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS 
 CREATE TABLE app._leads (
     lead_id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id                       UUID NOT NULL REFERENCES app._offices(office_id),
+    team_id                         UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
 
     full_legal_name                 TEXT,
     phone                           TEXT,
@@ -527,15 +565,20 @@ CREATE TABLE app._leads (
 );
 SELECT app.setup_auditable_table('leads');
 CREATE INDEX ON app._leads(office_id)                       WHERE deleted_at IS NULL;
+CREATE INDEX ON app._leads(office_id, team_id)              WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(stage)                           WHERE deleted_at IS NULL;
 CREATE INDEX ON app._leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._leads(existing_entity_id)              WHERE existing_entity_id IS NOT NULL AND deleted_at IS NULL;
 
 
 -- Tasks
+-- team_id must match the parent matter's or lead's team_id when those are set.
+-- Enforced in application code, not the DB (cross-table check would need a trigger).
 CREATE TABLE app._tasks (
     task_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    team_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
     matter_id   UUID,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     lead_id     UUID,
@@ -557,6 +600,7 @@ CREATE TABLE app._tasks (
 );
 SELECT app.setup_auditable_table('tasks');
 CREATE INDEX ON app._tasks(office_id)                       WHERE deleted_at IS NULL;
+CREATE INDEX ON app._tasks(office_id, team_id)              WHERE deleted_at IS NULL;
 CREATE INDEX ON app._tasks(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(lead_id)                         WHERE lead_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._tasks(assigned_to)                     WHERE assigned_to IS NOT NULL AND deleted_at IS NULL;
@@ -567,6 +611,8 @@ CREATE INDEX ON app._tasks(status)                          WHERE deleted_at IS 
 CREATE TABLE app._invoices (
     invoice_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    team_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
     matter_id   UUID,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     status      TEXT NOT NULL DEFAULT 'new',
@@ -589,6 +635,7 @@ CREATE TABLE app._invoices (
 );
 SELECT app.setup_auditable_table('invoices');
 CREATE INDEX ON app._invoices(office_id)                    WHERE deleted_at IS NULL;
+CREATE INDEX ON app._invoices(office_id, team_id)           WHERE deleted_at IS NULL;
 CREATE INDEX ON app._invoices(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX ON app._invoices(status)                       WHERE deleted_at IS NULL;
 

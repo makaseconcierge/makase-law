@@ -21,11 +21,10 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 --
 -- Audit attribution is driven by the per-transaction GUC `app.acting_user_id`,
 -- set by the shared `runAs(user_id, fn)` helper via `set_config(..., true)`.
--- This trigger is attached BEFORE INSERT OR UPDATE to every app._* table,
+-- This trigger is attached BEFORE INSERT OR UPDATE to every auditable table,
 -- overwriting created_by/updated_by so application code never has to pass
 -- them. created_at/created_by are preserved on UPDATE (you cannot rewrite
--- history). deleted_by is auto-filled on soft-delete transitions if the
--- caller only sets deleted_at.
+-- history).
 CREATE OR REPLACE FUNCTION app.set_audit_fields()
 RETURNS trigger LANGUAGE plpgsql
 SET search_path = ''
@@ -67,14 +66,6 @@ BEGIN
     NEW.updated_at := NOW();
     NEW.updated_by := acting;
 
-    -- deleted_by is fully trigger-owned, same as updated_by: the caller
-    -- cannot attribute a deletion (or undeletion) to anyone but themselves,
-    -- and cannot change deleted_by in isolation without flipping deleted_at.
-    IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
-      NEW.deleted_by := CASE WHEN NEW.deleted_at IS NULL THEN NULL ELSE acting END;
-    ELSE
-      NEW.deleted_by := OLD.deleted_by;
-    END IF;
   END IF;
 
   RETURN NEW;
@@ -100,43 +91,60 @@ BEGIN
 END;
 $$;
 
--- Adds the standard audit / soft-delete columns, creates the active-record
--- view, and attaches all standard triggers.
--- Call as: SELECT app.setup_auditable_table('offices');
--- Expects app._offices to already exist with only domain columns.
--- Indexes that reference deleted_at must come AFTER this call.
-CREATE OR REPLACE FUNCTION app.setup_auditable_table(base_name TEXT)
-RETURNS void LANGUAGE plpgsql
+-- Soft-delete attribution is trigger-owned: inserted rows are forced active,
+-- and UPDATE callers set/clear deleted_at while the database stamps deleted_by.
+CREATE OR REPLACE FUNCTION app.set_soft_delete_fields()
+RETURNS trigger LANGUAGE plpgsql
 SET search_path = ''
 AS $$
 DECLARE
-  tbl TEXT := '_' || base_name;
+  acting UUID;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.deleted_at := NULL;
+    NEW.deleted_by := NULL;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
+      IF NEW.deleted_at IS NULL THEN
+        NEW.deleted_by := NULL;
+      ELSE
+        acting := NULLIF(current_setting('app.acting_user_id', true), '')::uuid;
+        IF acting IS NULL THEN
+          RAISE EXCEPTION
+            'app.acting_user_id is not set — soft delete attribution for %.% requires runAs(...) or runAsSystem(...)',
+            TG_TABLE_SCHEMA, TG_TABLE_NAME
+            USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        NEW.deleted_by := acting;
+      END IF;
+    ELSE
+      -- Prevent callers from changing deleted_by without a delete/restore.
+      NEW.deleted_by := OLD.deleted_by;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION app.setup_auditable_table(tbl TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
 BEGIN
   EXECUTE format(
     'ALTER TABLE app.%I '
     'ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), '
-    'ADD COLUMN created_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id), '
+    'ADD COLUMN created_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app.user_profiles(user_id), '
     'ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), '
-    'ADD COLUMN updated_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app._user_profiles(user_id), '
-    'ADD COLUMN deleted_at TIMESTAMPTZ, '
-    'ADD COLUMN deleted_by UUID REFERENCES app._user_profiles(user_id), '
-    'ADD CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))',
+    'ADD COLUMN updated_by UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app.user_profiles(user_id)',
     tbl
-  );
-  EXECUTE format(
-    'CREATE VIEW app.%I WITH (security_invoker = true) '
-    'AS SELECT * FROM app.%I WHERE deleted_at IS NULL',
-    base_name, tbl
   );
   EXECUTE format(
     'CREATE TRIGGER %I_audit BEFORE INSERT OR UPDATE ON app.%I '
     'FOR EACH ROW EXECUTE FUNCTION app.set_audit_fields()',
-    base_name, tbl
-  );
-  EXECUTE format(
-    'CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.%I '
-    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
-    base_name
+    tbl, tbl
   );
   EXECUTE format(
     'CREATE TRIGGER %I_log AFTER INSERT OR UPDATE OR DELETE ON app.%I '
@@ -146,9 +154,57 @@ BEGIN
 END;
 $$;
 
+-- Adds soft-delete columns, creates active/all views, and attaches
+-- soft-delete protection triggers.
+-- Call after setup_auditable_table so the soft-delete trigger can run before
+-- set_audit_fields checks whether the UPDATE is a no-op.
+-- Expects the underscored base table to already exist with office_id.
+-- Indexes that reference deleted_at must come AFTER this call.
+CREATE OR REPLACE FUNCTION app.setup_soft_delete(tbl TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  base_name TEXT := SUBSTRING(tbl, 2);
+BEGIN
+  EXECUTE format(
+    'ALTER TABLE app.%I '
+    'ADD COLUMN deleted_at TIMESTAMPTZ, '
+    'ADD COLUMN deleted_by UUID REFERENCES app.user_profiles(user_id), '
+    'ADD CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))',
+    tbl
+  );
+  EXECUTE format(
+    'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.set_soft_delete_fields()',
+    '00_soft_delete_fields', tbl
+  );
+  EXECUTE format(
+    'CREATE VIEW app.%I WITH (security_invoker = true) '
+    'AS SELECT * FROM app.%I WHERE deleted_at IS NULL',
+    base_name, tbl
+  );
+  EXECUTE format(
+    'CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
+    base_name
+  );
+  EXECUTE format(
+    'CREATE VIEW app.%I_all WITH (security_invoker = true) '
+    'AS SELECT * FROM app.%I',
+    base_name, tbl
+  );
+  EXECUTE format(
+    'CREATE TRIGGER no_delete_all INSTEAD OF DELETE ON app.%I_all '
+    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
+    base_name
+  );
+END;
+$$;
+
 -- AUDIT LOG
 -- The write_audit_log function is defined here but the audit_log table
--- it writes into is declared further down (after _user_profiles, so the
+-- it writes into is declared further down (after user_profiles, so the
 -- changed_by FK resolves). Function bodies are parsed lazily — table
 -- references are resolved at execution time. SECURITY DEFINER so the
 -- function can INSERT into the locked-down audit_log table.
@@ -228,9 +284,13 @@ BEGIN
   );
 
   INSERT INTO app.audit_log (
-    table_schema, table_name, record_pk, op, diff, changed_by
+    table_schema, table_name, record_pk, op, diff, changed_by, office_id
   ) VALUES (
-    TG_TABLE_SCHEMA, TG_TABLE_NAME, record_pk, TG_OP, diff, acting
+    TG_TABLE_SCHEMA, TG_TABLE_NAME, record_pk, TG_OP, diff, acting,
+    CASE TG_OP
+      WHEN 'DELETE' THEN OLD.office_id
+      ELSE NEW.office_id
+    END
   );
 
   RETURN NULL;  -- AFTER trigger, return value ignored
@@ -238,15 +298,15 @@ END;
 $$;
 
 -- USER PROFILES
-CREATE TABLE app._user_profiles (
+CREATE TABLE app.user_profiles (
     user_id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE NO ACTION,
     display_name    TEXT NOT NULL,
     email           TEXT NOT NULL UNIQUE,
     phone           TEXT
 );
-SELECT app.setup_auditable_table('user_profiles');
 
--- Auth-triggered writes to app._user_profiles set app.acting_user_id to
+
+-- Auth-triggered writes to app.user_profiles set app.acting_user_id to
 -- the user themselves so the audit trigger attributes the row correctly.
 CREATE OR REPLACE FUNCTION app.handle_new_auth_user()
 RETURNS trigger
@@ -256,7 +316,7 @@ SET search_path = ''
 AS $$
 BEGIN
   PERFORM set_config('app.acting_user_id', NEW.id::text, true);
-  INSERT INTO app._user_profiles (user_id, display_name, email, phone)
+  INSERT INTO app.user_profiles (user_id, display_name, email, phone)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data ->> 'name',  ''),
@@ -278,7 +338,7 @@ SET search_path = ''
 AS $$
 BEGIN
   PERFORM set_config('app.acting_user_id', NEW.id::text, true);
-  UPDATE app._user_profiles
+  UPDATE app.user_profiles
   SET email = NEW.email,
       phone = NEW.phone
   WHERE user_id = NEW.id;
@@ -290,6 +350,19 @@ CREATE TRIGGER on_auth_user_updated AFTER UPDATE ON auth.users
 FOR EACH ROW
 WHEN (OLD.email IS DISTINCT FROM NEW.email OR OLD.phone IS DISTINCT FROM NEW.phone)
 EXECUTE FUNCTION app.handle_auth_user_updated();
+
+
+
+-- OFFICES
+CREATE TABLE app.offices (
+    office_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    address     JSONB,
+    phone       TEXT,
+    email       TEXT,
+    website     TEXT,
+    logo        TEXT
+);
 
 
 -- AUDIT LOG
@@ -304,12 +377,16 @@ CREATE TABLE app.audit_log (
     record_pk    JSONB NOT NULL,
     op           TEXT NOT NULL CHECK (op IN ('INSERT', 'UPDATE', 'DELETE')),
     diff         JSONB NOT NULL,
-    changed_by   UUID NOT NULL REFERENCES app._user_profiles(user_id),
+    changed_by   UUID NOT NULL REFERENCES app.user_profiles(user_id),
+    office_id    UUID NOT NULL REFERENCES app.offices(office_id),
+    -- Reference identity, not employment: audit rows must survive employee
+    -- deactivation and system-authored writes.
     changed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX ON app.audit_log (table_schema, table_name, changed_at DESC);
 CREATE INDEX ON app.audit_log USING gin (record_pk);
 CREATE INDEX ON app.audit_log (changed_by, changed_at DESC);
+CREATE INDEX ON app.audit_log (office_id, changed_at DESC);
 
 -- Lock down: only the SECURITY DEFINER trigger function (owned by
 -- postgres) can INSERT. service_role can SELECT (for the audit UI).
@@ -319,82 +396,77 @@ GRANT SELECT ON app.audit_log TO service_role;
 
 
 
--- OFFICES
-CREATE TABLE app._offices (
-    office_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        TEXT NOT NULL,
-    address     JSONB,
-    phone       TEXT,
-    email       TEXT,
-    website     TEXT,
-    logo        TEXT
-);
-SELECT app.setup_auditable_table('offices');
-
-
 -- EMPLOYEES
 CREATE TABLE app._employees (
-    user_id             UUID NOT NULL REFERENCES app._user_profiles(user_id),
-    office_id           UUID NOT NULL REFERENCES app._offices(office_id),
+    user_id             UUID NOT NULL REFERENCES app.user_profiles(user_id),
+    office_id           UUID NOT NULL REFERENCES app.offices(office_id),
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
     is_admin            BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (office_id, user_id)
 );
-SELECT app.setup_auditable_table('employees');
+SELECT app.setup_auditable_table('_employees');
+SELECT app.setup_soft_delete('_employees'); -- used to deactivate employees from a firm, but they are still in the system for historical purposes and to keep tasks that were assigned to them before they were deactivated etc.
 CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._employees(office_id) WHERE deleted_at IS NULL;
+
+
+-- now that employees table is setup, we can finish setting up the offices table
+SELECT app.setup_auditable_table('offices');
 
 
 -- TEAMS
-CREATE TABLE app._teams (
+CREATE TABLE app.teams (
     team_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id UUID NOT NULL REFERENCES app.offices(office_id),
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     CONSTRAINT teams_office_uk UNIQUE (office_id, team_id)
 );
 SELECT app.setup_auditable_table('teams');
-CREATE INDEX ON app._teams(office_id) WHERE deleted_at IS NULL;
+-- no soft delete because we nothing should be tied to a deleted team and data in the team table is just for display purposes.
+-- anything tied to a team will need to be reassigned to a new team before the team can be deleted
+CREATE INDEX ON app.teams(office_id);
 
 
 -- team_roles
-CREATE TABLE app._team_roles (
+CREATE TABLE app.team_roles (
     team_role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id UUID NOT NULL REFERENCES app.offices(office_id),
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     role_config JSONB NOT NULL DEFAULT '{}'::jsonb, -- defines permissions for team owned resources {matter: {read: boolean, write: boolean}, tasks: {read: boolean, write: boolean}...}
     CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
 );
 SELECT app.setup_auditable_table('team_roles');
-CREATE INDEX ON app._team_roles(office_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app.team_roles(office_id);
 
 
 -- TEAM_MEMBER_ROLES
-CREATE TABLE app._team_member_roles (
-    office_id UUID NOT NULL REFERENCES app._offices(office_id),
+CREATE TABLE app.team_member_roles (
+    office_id UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
     team_id UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE CASCADE,
     user_id UUID NOT NULL,
-    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE CASCADE,
     team_role_id UUID NOT NULL,
-    FOREIGN KEY (office_id, team_role_id) REFERENCES app._team_roles(office_id, team_role_id),
+    FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id) ON DELETE CASCADE,
     functional_roles TEXT[] NOT NULL DEFAULT '{}', -- based on position role_config and is_supervisor and is_manager
     PRIMARY KEY (office_id, team_id, user_id, team_role_id)
 );
 SELECT app.setup_auditable_table('team_member_roles');
-CREATE INDEX ON app._team_member_roles(office_id) WHERE deleted_at IS NULL;
-CREATE INDEX ON app._team_member_roles(office_id, team_id) WHERE deleted_at IS NULL;
-CREATE INDEX ON app._team_member_roles(office_id, user_id) WHERE deleted_at IS NULL;
-CREATE INDEX ON app._team_member_roles(office_id, team_id, team_role_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app.team_member_roles(office_id);
+CREATE INDEX ON app.team_member_roles(office_id, team_id);
+CREATE INDEX ON app.team_member_roles(office_id, user_id);
+CREATE INDEX ON app.team_member_roles(office_id, team_id, team_role_id);
 
 
 -- MATTERS
 CREATE TABLE app._matters (
     matter_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     stage       TEXT NOT NULL DEFAULT 'consultation',
@@ -410,7 +482,9 @@ CREATE TABLE app._matters (
     preferred_office_location TEXT NOT NULL DEFAULT '',
     data        JSONB NOT NULL DEFAULT '{}'::jsonb,
     archived_at                  TIMESTAMPTZ,
-    archived_by                  UUID REFERENCES app._user_profiles(user_id),
+    archived_by                  UUID,
+    FOREIGN KEY (office_id, archived_by) REFERENCES app._employees(office_id, user_id),
+
 
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
     CONSTRAINT matters_team_uk UNIQUE (office_id, matter_id, team_id),
@@ -419,42 +493,44 @@ CREATE TABLE app._matters (
     )),
     CONSTRAINT matters_stage_check CHECK (stage IN (
         'consultation', 'setup', 'active', 'closed', 'archived'
-    ))
+    )),
+    CONSTRAINT matters_archived_check CHECK ((archived_at IS NULL) = (archived_by IS NULL))
 );
-SELECT app.setup_auditable_table('matters');
+SELECT app.setup_auditable_table('_matters');
+SELECT app.setup_soft_delete('_matters');
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
 
 -- MATTER STAFF (links firm employees to matters with their staffing matter_role)
-CREATE TABLE app._matter_staff (
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+CREATE TABLE app.matter_staff (
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     matter_id   UUID NOT NULL,
     user_id     UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE,
     FOREIGN KEY (office_id, user_id)   REFERENCES app._employees(office_id, user_id),
     matter_role        TEXT NOT NULL DEFAULT 'support',
+    -- these roles define official roles on the matter, not job titles.
 
     PRIMARY KEY (office_id, matter_id, user_id, matter_role),
     CONSTRAINT matter_staff_role_check CHECK (matter_role IN (
-        'responsible_attorney', 'supervising_attorney', 'counsel', 'paralegal', 'support'
+        'responsible_attorney', 'supervising_attorney', 'counsel', 'paralegal', 'clerk', 'support'
     ))
 );
 SELECT app.setup_auditable_table('matter_staff');
-CREATE INDEX ON app._matter_staff(office_id, matter_id) WHERE deleted_at IS NULL;
-CREATE INDEX ON app._matter_staff(office_id, user_id)   WHERE deleted_at IS NULL;
+CREATE INDEX ON app.matter_staff(office_id, matter_id);
+CREATE INDEX ON app.matter_staff(office_id, user_id);
 
 -- Enforce exactly one 'responsible' attorney per active matter
-CREATE UNIQUE INDEX ON app._matter_staff (office_id, matter_id)
-  WHERE matter_role = 'responsible_attorney' AND deleted_at IS NULL;
+CREATE UNIQUE INDEX ON app.matter_staff (office_id, matter_id)
+  WHERE matter_role = 'responsible_attorney';
 
 
 -- ENTITIES (universal person/organization registry)
-CREATE TABLE app._entities (
+CREATE TABLE app.entities (
     entity_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id       UUID NOT NULL REFERENCES app._offices(office_id),
-    user_id         UUID REFERENCES app._user_profiles(user_id),
+    office_id       UUID NOT NULL REFERENCES app.offices(office_id),
     full_legal_name TEXT NOT NULL,
     email           TEXT,
     phone           TEXT,
@@ -465,38 +541,36 @@ CREATE TABLE app._entities (
     CONSTRAINT entities_type_check CHECK (entity_type IN ('individual', 'organization'))
 );
 SELECT app.setup_auditable_table('entities');
-CREATE INDEX ON app._entities(office_id)                    WHERE deleted_at IS NULL;
-CREATE INDEX ON app._entities(user_id)                      WHERE user_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._entities(email)                        WHERE deleted_at IS NULL;
-CREATE INDEX ON app._entities(phone)                        WHERE deleted_at IS NULL;
-CREATE INDEX ON app._entities USING gin (full_legal_name gin_trgm_ops) WHERE deleted_at IS NULL;
+CREATE INDEX ON app.entities(office_id);
+CREATE INDEX ON app.entities(email);
+CREATE INDEX ON app.entities(phone);
+CREATE INDEX ON app.entities USING gin (full_legal_name gin_trgm_ops);
 
 
 -- ENTITY_ROLES (links entities to matters with their matter_role)
-CREATE TABLE app._entity_roles (
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+CREATE TABLE app.entity_roles (
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     entity_id   UUID NOT NULL,
-    FOREIGN KEY (office_id, entity_id) REFERENCES app._entities(office_id, entity_id),
+    FOREIGN KEY (office_id, entity_id) REFERENCES app.entities(office_id, entity_id),
     matter_id   UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE,
     matter_role        TEXT NOT NULL,
 
     PRIMARY KEY (office_id, entity_id, matter_id, matter_role),
-    CONSTRAINT entity_roles_unique UNIQUE (entity_id, matter_id, matter_role),
     CONSTRAINT entity_roles_role_check CHECK (matter_role IN (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
 SELECT app.setup_auditable_table('entity_roles');
-CREATE INDEX ON app._entity_roles(matter_id)                WHERE deleted_at IS NULL;
+CREATE INDEX ON app.entity_roles(matter_id);
 
 
 -- LEADS (intake pipeline)
-CREATE TABLE app._leads (
+CREATE TABLE app.leads (
     lead_id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id                       UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id                       UUID NOT NULL REFERENCES app.offices(office_id),
     team_id                         UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id),
 
     full_legal_name                 TEXT,
     phone                           TEXT,
@@ -507,7 +581,7 @@ CREATE TABLE app._leads (
     stage                           TEXT NOT NULL DEFAULT 'collect_contact_info',
 
     existing_entity_id              UUID,
-    FOREIGN KEY (office_id, existing_entity_id) REFERENCES app._entities(office_id, entity_id),
+    FOREIGN KEY (office_id, existing_entity_id) REFERENCES app.entities(office_id, entity_id),
     entity_search_results           JSONB NOT NULL DEFAULT '[]'::jsonb,
 
     matter_type                     TEXT,
@@ -536,9 +610,9 @@ CREATE TABLE app._leads (
     fee_agreement_status            TEXT,
 
     entity_id                       UUID,
-    FOREIGN KEY (office_id, entity_id) REFERENCES app._entities(office_id, entity_id),
+    FOREIGN KEY (office_id, entity_id) REFERENCES app.entities(office_id, entity_id) ON DELETE SET NULL (entity_id),
     matter_id                       UUID,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id) ON DELETE SET NULL (matter_id),
 
     CONSTRAINT leads_office_uk UNIQUE (office_id, lead_id),
     CONSTRAINT leads_team_uk UNIQUE (office_id, lead_id, team_id),
@@ -566,25 +640,24 @@ CREATE TABLE app._leads (
     )
 );
 SELECT app.setup_auditable_table('leads');
-CREATE INDEX ON app._leads(office_id)                       WHERE deleted_at IS NULL;
-CREATE INDEX ON app._leads(office_id, team_id)              WHERE deleted_at IS NULL;
-CREATE INDEX ON app._leads(stage)                           WHERE deleted_at IS NULL;
-CREATE INDEX ON app._leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._leads(existing_entity_id)              WHERE existing_entity_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ON app.leads(office_id);
+CREATE INDEX ON app.leads(office_id, team_id);
+CREATE INDEX ON app.leads(office_id, stage);
+CREATE INDEX ON app.leads(assigned_attorney_user_id)       WHERE assigned_attorney_user_id IS NOT NULL;
 
 
 -- Tasks
 -- team_id consistency with parent matter/lead is enforced by the composite FKs below
 -- (MATCH SIMPLE: FK is skipped when matter_id/lead_id is NULL, enforced when set).
-CREATE TABLE app._tasks (
+CREATE TABLE app.tasks (
     task_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID,
     FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
     lead_id     UUID,
-    FOREIGN KEY (office_id, lead_id, team_id) REFERENCES app._leads(office_id, lead_id, team_id),
+    FOREIGN KEY (office_id, lead_id, team_id) REFERENCES app.leads(office_id, lead_id, team_id),
     assigned_to UUID,
     FOREIGN KEY (office_id, assigned_to) REFERENCES app._employees(office_id, user_id),
     name        TEXT NOT NULL,
@@ -598,23 +671,27 @@ CREATE TABLE app._tasks (
     CONSTRAINT tasks_office_uk UNIQUE (office_id, task_id),
     CONSTRAINT tasks_status_check CHECK (status IN (
         'pending', 'ready', 'active', 'done'
-    ))
+    )),
+    CONSTRAINT tasks_context_check CHECK (
+      matter_id IS NULL OR lead_id IS NULL
+    )
+
 );
 SELECT app.setup_auditable_table('tasks');
-CREATE INDEX ON app._tasks(office_id)                       WHERE deleted_at IS NULL;
-CREATE INDEX ON app._tasks(office_id, team_id)              WHERE deleted_at IS NULL;
-CREATE INDEX ON app._tasks(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._tasks(lead_id)                         WHERE lead_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._tasks(assigned_to)                     WHERE assigned_to IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._tasks(status)                          WHERE deleted_at IS NULL;
+CREATE INDEX ON app.tasks(office_id);
+CREATE INDEX ON app.tasks(office_id, team_id);
+CREATE INDEX ON app.tasks(matter_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX ON app.tasks(lead_id) WHERE lead_id IS NOT NULL;
+CREATE INDEX ON app.tasks(assigned_to) WHERE assigned_to IS NOT NULL;
+CREATE INDEX ON app.tasks(status);
 
 
 -- INVOICES
-CREATE TABLE app._invoices (
+CREATE TABLE app.invoices (
     invoice_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app._teams(office_id, team_id),
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID,
     FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
     status      TEXT NOT NULL DEFAULT 'new',
@@ -636,66 +713,71 @@ CREATE TABLE app._invoices (
     ))
 );
 SELECT app.setup_auditable_table('invoices');
-CREATE INDEX ON app._invoices(office_id)                    WHERE deleted_at IS NULL;
-CREATE INDEX ON app._invoices(office_id, team_id)           WHERE deleted_at IS NULL;
-CREATE INDEX ON app._invoices(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._invoices(status)                       WHERE deleted_at IS NULL;
+CREATE INDEX ON app.invoices(office_id);
+CREATE INDEX ON app.invoices(office_id, team_id);
+CREATE INDEX ON app.invoices(matter_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX ON app.invoices(office_id, status);
 
 
 -- TIME_ENTRIES
-CREATE TABLE app._time_entries (
+CREATE TABLE app.time_entries (
     time_entry_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id         UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id         UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
     task_id           UUID,
-    FOREIGN KEY (office_id, task_id) REFERENCES app._tasks(office_id, task_id),
+    FOREIGN KEY (office_id, task_id) REFERENCES app.tasks(office_id, task_id) ON DELETE NO ACTION,
     invoice_id        UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app._invoices(office_id, invoice_id),
+    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     user_id           UUID NOT NULL,
-    FOREIGN KEY (user_id, office_id) REFERENCES app._employees(user_id, office_id),
-    end_timestamp     TIMESTAMPTZ NOT NULL, -- start_timestamp computed from this + actual_duration
-    actual_duration   INTEGER NOT NULL,
-    billable_duration INTEGER NOT NULL,
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE NO ACTION,
+    start_timestamp   TIMESTAMPTZ NOT NULL,
+    end_timestamp     TIMESTAMPTZ NOT NULL,
+    duration_seconds  INTEGER NOT NULL GENERATED ALWAYS AS (EXTRACT(EPOCH FROM (end_timestamp - start_timestamp))::INTEGER) STORED,
+
     description       TEXT,
 
-    CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id)
+    CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id),
+    CONSTRAINT time_entries_timestamp_check CHECK (start_timestamp < end_timestamp)
 );
 SELECT app.setup_auditable_table('time_entries');
-CREATE INDEX ON app._time_entries(office_id)                WHERE deleted_at IS NULL;
-CREATE INDEX ON app._time_entries(task_id)                  WHERE task_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._time_entries(user_id)                  WHERE deleted_at IS NULL;
-CREATE INDEX ON app._time_entries(invoice_id)               WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ON app.time_entries(office_id);
+CREATE INDEX ON app.time_entries(office_id, task_id) WHERE task_id IS NOT NULL;
+CREATE INDEX ON app.time_entries(office_id, user_id);
+CREATE INDEX ON app.time_entries(office_id, invoice_id) WHERE invoice_id IS NOT NULL;
+CREATE INDEX ON app.time_entries(office_id, user_id, start_timestamp DESC);
+CREATE INDEX ON app.time_entries(office_id, task_id, start_timestamp DESC);
 
 
 -- EXPENSES
-CREATE TABLE app._expenses (
+CREATE TABLE app.expenses (
     expense_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     matter_id   UUID,
     FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     invoice_id  UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app._invoices(office_id, invoice_id),
+    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     amount      NUMERIC NOT NULL,
     description TEXT,
     is_reimbursable BOOLEAN NOT NULL DEFAULT FALSE,
-    is_billable BOOLEAN NOT NULL DEFAULT TRUE,
+    billable BOOLEAN NOT NULL DEFAULT TRUE,
+    no_charge BOOLEAN NOT NULL DEFAULT FALSE,
     receipt_path TEXT[] NOT NULL DEFAULT '{}',
     external_invoice_data JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
 SELECT app.setup_auditable_table('expenses');
-CREATE INDEX ON app._expenses(office_id)                    WHERE deleted_at IS NULL;
-CREATE INDEX ON app._expenses(matter_id)                    WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._expenses(invoice_id)                   WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ON app.expenses(office_id);
+CREATE INDEX ON app.expenses(matter_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX ON app.expenses(invoice_id) WHERE invoice_id IS NOT NULL;
 
 
 -- INVOICE_PAYMENTS
-CREATE TABLE app._invoice_payments (
+CREATE TABLE app.invoice_payments (
     invoice_payment_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
+    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     invoice_id  UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app._invoices(office_id, invoice_id),
-    amount      NUMERIC NOT NULL,
+    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE NO ACTION,
+    amount      NUMERIC NOT NULL CHECK (amount > 0),
     payment_date TIMESTAMPTZ NOT NULL,
     notes TEXT,
     external_id TEXT,
@@ -706,42 +788,16 @@ CREATE TABLE app._invoice_payments (
     CONSTRAINT invoice_payments_office_uk UNIQUE (office_id, invoice_payment_id)
 );
 SELECT app.setup_auditable_table('invoice_payments');
-CREATE INDEX ON app._invoice_payments(office_id)            WHERE deleted_at IS NULL;
-CREATE INDEX ON app._invoice_payments(invoice_id)           WHERE invoice_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._invoice_payments(external_id)          WHERE external_id IS NOT NULL AND deleted_at IS NULL;
-
-
--- FORMS
-CREATE TABLE app._forms (
-    form_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    office_id   UUID NOT NULL REFERENCES app._offices(office_id),
-    entity_id   UUID NOT NULL,
-    FOREIGN KEY (office_id, entity_id) REFERENCES app._entities(office_id, entity_id),
-    matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
-    form_type   TEXT NOT NULL,
-    form_data   JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status      TEXT NOT NULL DEFAULT 'submitted',
-
-    CONSTRAINT forms_office_uk UNIQUE (office_id, form_id),
-    CONSTRAINT forms_status_check CHECK (status IN ('draft', 'submitted', 'reviewed', 'filed'))
-);
-SELECT app.setup_auditable_table('forms');
-CREATE INDEX ON app._forms(form_type)                       WHERE deleted_at IS NULL;
-CREATE INDEX ON app._forms(entity_id)                       WHERE deleted_at IS NULL;
-CREATE INDEX ON app._forms(office_id)                       WHERE deleted_at IS NULL;
-CREATE INDEX ON app._forms(matter_id)                       WHERE matter_id IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX ON app._forms(status)                          WHERE deleted_at IS NULL;
+CREATE INDEX ON app.invoice_payments(office_id);
+CREATE INDEX ON app.invoice_payments(invoice_id) WHERE invoice_id IS NOT NULL;
+CREATE INDEX ON app.invoice_payments(external_id) WHERE external_id IS NOT NULL;
 
 
 -- SYSTEM USER SEED
 -- Unattended writes (cron, migrations, admin scripts) attribute to this
 -- user via `runAsSystem(...)` in @makase-law/shared. The auth.users row is
--- required because app._user_profiles.user_id FKs into it; the row is
 -- deliberately unlogin-able (no password, banned). The on_auth_user_created
--- trigger will create the matching app._user_profiles row and the
--- set_audit_fields trigger will self-attribute created_by/updated_by via
--- app.acting_user_id that handle_new_auth_user sets to NEW.id.
+-- trigger creates the matching app.user_profiles row.
 INSERT INTO auth.users (
     instance_id,
     id,

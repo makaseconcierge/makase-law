@@ -2,10 +2,10 @@ import type { OfficesOfficeId } from './Offices.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app._teams */
+/** Identifier type for app.teams */
 export type TeamsTeamId = string;
 
-/** Represents the table app._teams */
+/** Represents the table app.teams */
 export default interface TeamsTable {
   team_id: ColumnType<TeamsTeamId, TeamsTeamId | undefined, TeamsTeamId>;
 
@@ -22,10 +22,6 @@ export default interface TeamsTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type Teams = Selectable<TeamsTable>;

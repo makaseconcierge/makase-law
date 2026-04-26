@@ -136,28 +136,16 @@ erDiagram
         int actual_duration
         int billable_duration
     }
-    forms {
-        uuid id PK
-        uuid office_id FK
-        uuid matter_id FK
-        text form_type
-        jsonb form_data
-        text status
-    }
-
     users ||--o{ employees : ""
     offices ||--o{ employees : ""
     offices ||--o{ entities : ""
     offices ||--o{ matters : ""
     offices ||--o{ leads : ""
     offices ||--o{ time_entries : ""
-    offices ||--o{ forms : ""
     users |o--o{ entities : ""
     entities ||--o{ entity_roles : ""
     matters ||--o{ entity_roles : ""
     matters ||--o{ time_entries : ""
-    matters ||--o{ forms : ""
-    entities ||--o{ forms : ""
     entities |o--o{ leads : "existing_entity"
     entities |o--o{ leads : "resolved_entity"
     matters |o--o{ leads : "created_matter"
@@ -170,9 +158,9 @@ erDiagram
 
 - `**entities` as universal registry.** Everyone -- clients, opposing parties, witnesses, experts, attorneys -- is an `entity`. Their role in a specific matter is defined by `entity_roles`. This powers the conflict check system from a single table.
 - `**pg_trgm` fuzzy search.** GIN index on `entities.full_legal_name` enables similarity-based name matching during conflict checks.
-- `**leads` as a state machine.** The `stage` column (15 valid stages via CHECK constraint) drives the entire intake pipeline. All intermediate data (search results, conflict data, scores) lives on the lead row.
-- **Generic JSONB forms.** `forms.form_data` stores arbitrary form payloads keyed by `form_type`. New form types require no schema migration.
-- **Soft deletes.** All tables carry `deleted_at` / `deleted_by`. A shared `update_updated_at()` trigger keeps timestamps current.
+- `**leads` as a state machine.** The `stage` column drives the intake pipeline. Intermediate data (search results, conflict data, scores) lives on the lead row.
+- **Forms are not core schema.** Probate form workflows may return later as feature-specific tables or document automation, but the generic `forms` table was removed from the core migration.
+- **Audit + soft delete are separate.** Auditable tables get trigger-owned `created_*` / `updated_*`; soft delete is opt-in where historical active views add value.
 
 ---
 
@@ -297,7 +285,7 @@ flowchart TD
 
 |            |                                                      |
 | ---------- | ---------------------------------------------------- |
-| **Tables** | `leads`, `forms`                                     |
+| **Tables** | `leads`                                              |
 | **Routes** | Planned                                              |
 | **Apps**   | Client (booking) + Office (notes, transcript review) |
 
@@ -309,7 +297,7 @@ Per-attorney Google Calendar links auto-sent on qualification. Consult agreement
 
 |            |                                      |
 | ---------- | ------------------------------------ |
-| **Tables** | `leads`, `forms`                     |
+| **Tables** | `leads`                              |
 | **Routes** | Planned                              |
 | **Apps**   | Office (drafting) + Client (signing) |
 
@@ -333,7 +321,7 @@ Stripe integration (Apple Pay, Google Pay, Stripe Link). Auto-redirect to paymen
 
 |            |                                                                                          |
 | ---------- | ---------------------------------------------------------------------------------------- |
-| **Tables** | `matters`, `entity_roles`, `entities`, `forms`                                           |
+| **Tables** | `matters`, `entity_roles`, `entities`, `tasks`                                           |
 | **Routes** | `GET/POST /office/matters`, `GET/PATCH /office/matters/:id` (exist); task routes planned |
 | **Apps**   | Office                                                                                   |
 
@@ -357,7 +345,7 @@ Start/stop timer + manual entry. `actual_duration` vs `billable_duration` (round
 
 |            |                                                                         |
 | ---------- | ----------------------------------------------------------------------- |
-| **Tables** | `time_entries`; planned: `invoices`, `invoice_line_items`, `rate_cards` |
+| **Tables** | `time_entries`, `invoices`, `invoice_payments`, `expenses`; planned: `rate_cards` |
 | **Routes** | Planned                                                                 |
 | **Apps**   | Office                                                                  |
 
@@ -369,7 +357,7 @@ Two-stage approval: Lisa reviews -> Elizabeth final approval. Internal invoices 
 
 |            |                                                 |
 | ---------- | ----------------------------------------------- |
-| **Tables** | `matters`, `entities`, `time_entries`, `forms`  |
+| **Tables** | `matters`, `entities`, `time_entries`, `invoices` |
 | **Routes** | `/client/`* (partially exist); auth/scoping TBD |
 | **Apps**   | Client                                          |
 
@@ -381,19 +369,19 @@ Read-only: case status, documents, billing. View unbilled time since last invoic
 
 |            |                                                                                                     |
 | ---------- | --------------------------------------------------------------------------------------------------- |
-| **Tables** | `matters`, `forms`, `entities`                                                                      |
-| **Routes** | `POST/GET /client/forms/form_de_{111,121,140}` (exist); `GET/PATCH /office/forms/form_de_`* (exist) |
-| **Apps**   | Client (form wizards) + Office (review, PDF generation)                                             |
+| **Tables** | `matters`, `entities`, `entity_roles`, `tasks`                                                       |
+| **Routes** | Future document automation routes TBD                                                               |
+| **Apps**   | Client + Office                                                                                     |
 
 
-Most built-out module. Multi-step form wizards for DE-111, DE-121, DE-140 with PDF generation via pdf-lib. Planned: DE-160, DE-165, DE-295, DE-310. Small estate flag (< $184,500 -> Summary Administration). 8-milestone California Probate Code checklist. Statutory deadline auto-tracking. Attorney review routing for prefilled forms. Future: AI doc summarization for wills/trusts.
+Probate-specific document automation is no longer part of the core schema. Future probate workflows should build on matters, entities, entity_roles, and tasks rather than a generic core `forms` table.
 
 ### Platform, Security & Data
 
 
 |            |                                                                                 |
 | ---------- | ------------------------------------------------------------------------------- |
-| **Tables** | `users`, `offices`, `employees`; planned: `audit_log`, `notifications`          |
+| **Tables** | `user_profiles`, `offices`, `employees`, `audit_log`; planned: `notifications`  |
 | **Routes** | `GET /auth/me`, `POST /auth/offices` (exist); audit/notification routes planned |
 | **Apps**   | All                                                                             |
 
@@ -409,11 +397,11 @@ Mobile-first (non-negotiable). RBAC via `employees.permissions[]` -- API must en
 
 | Component       | Details                                                       |
 | --------------- | ------------------------------------------------------------- |
-| Database schema | 9 tables, indexes, triggers, RLS, `pg_trgm`                   |
+| Database schema | Core tables, indexes, audit triggers, soft-delete views, `pg_trgm` |
 | Supabase Auth   | JWT auth, OTP login, user bootstrapping                       |
 | Auth API        | `GET /auth/me`, `POST /auth/offices`                          |
 | Matter CRUD     | Create, list, get, update (both `/client` and `/office`)      |
-| Probate forms   | DE-111, DE-121, DE-140 wizards (client) + review/PDF (office) |
+| Probate forms   | Deferred; not part of the core schema                         |
 | Frontend        | Auth flow, routing, session management in both apps           |
 
 
@@ -429,13 +417,12 @@ Mobile-first (non-negotiable). RBAC via `employees.permissions[]` -- API must en
 
 ### Needs Design + Implementation
 
-Lead intake API, notification system, time tracking, billing/invoicing (new tables needed), scheduling (Google Calendar API), fee agreements (templates, e-sig), payment (Stripe webhooks, activation), client portal auth, task management (table, templates, Kanban), Google integrations (Chat, Drive, Meet), audit log, close-out workflow, AI features (transcription, summaries, meeting notes), additional probate forms (DE-160, DE-165, DE-295, DE-310).
+Lead intake API, notification system, scheduling (Google Calendar API), fee agreements (templates, e-sig), payment (Stripe webhooks, activation), client portal auth, task templates/Kanban, Google integrations (Chat, Drive, Meet), close-out workflow, AI features (transcription, summaries, meeting notes), and future probate document automation.
 
 ### Known Issues
 
 1. **No auth on `/client` and `/office` routes.** Only `/auth/`* uses `authMiddleware`. Must be fixed before production.
-2. `**created_by`/`updated_by` missing in form inserts.** Client POST handlers omit these NOT NULL fields.
-3. **Stale `api/README.md`.** References Deno but project runs on Bun.
+2. **Stale `api/README.md`.** References Deno but project runs on Bun.
 
 ---
 
@@ -504,7 +491,7 @@ flowchart LR
 
 1. leads, matters, tasks, and time tracking (asana + hubspot + big time)
 2. migrate data and release v1
-3. data pipeline, lead data pulled into matter, matter data used to auto generated forms (start with probate)
+3. data pipeline, lead data pulled into matter, matter data used for future document automation
 4. full automation of lead intake
 5. fill in gaps and add nice to haves
 

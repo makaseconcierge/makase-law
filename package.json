@@ -14,5 +14,8 @@
     "dev:client": "bun run --cwd apps/client-portal-web-app dev",
     "dev:office": "bun run --cwd apps/law-office-web-app dev",
     "db:types": "bun run --cwd packages/types db:types"
+  },
+  "devDependencies": {
+    "@postgres-language-server/cli": "^0.24.0"
   }
 }

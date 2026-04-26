@@ -4,7 +4,7 @@ import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { TeamRolesTeamRoleId } from './TeamRoles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Represents the table app._team_member_roles */
+/** Represents the table app.team_member_roles */
 export default interface TeamMemberRolesTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
@@ -23,10 +23,6 @@ export default interface TeamMemberRolesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type TeamMemberRoles = Selectable<TeamMemberRolesTable>;

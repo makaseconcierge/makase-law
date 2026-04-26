@@ -3,7 +3,7 @@ import type { OfficePatch } from "@makase-law/types";
 import { JsonObjectSchema } from "./jsonSchema";
 
 /**
- * Runtime validator for PATCH payloads to `app._offices`. Pairs with the
+ * Runtime validator for PATCH payloads to `app.offices`. Pairs with the
  * TS `OfficePatch` type via `satisfies z.ZodType<OfficePatch>` — if a
  * column is added/removed/retyped in the DB, `kysely-codegen` regenerates
  * `DB`, which propagates through `OfficePatch`, which makes this zod

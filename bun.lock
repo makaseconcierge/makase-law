@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "makase-law-monorepo",
+      "devDependencies": {
+        "@postgres-language-server/cli": "^0.24.0",
+      },
     },
     "apps/api": {
       "name": "makase-law-api",
@@ -70,6 +73,22 @@
     "@makase-law/shared": ["@makase-law/shared@workspace:packages/shared"],
 
     "@makase-law/types": ["@makase-law/types@workspace:packages/types"],
+
+    "@postgres-language-server/cli": ["@postgres-language-server/cli@0.24.0", "", { "optionalDependencies": { "@postgres-language-server/cli-aarch64-apple-darwin": "0.24.0", "@postgres-language-server/cli-aarch64-linux-gnu": "0.24.0", "@postgres-language-server/cli-aarch64-windows-msvc": "0.24.0", "@postgres-language-server/cli-x86_64-apple-darwin": "0.24.0", "@postgres-language-server/cli-x86_64-linux-gnu": "0.24.0", "@postgres-language-server/cli-x86_64-linux-musl": "0.24.0", "@postgres-language-server/cli-x86_64-windows-msvc": "0.24.0" }, "bin": { "postgres-language-server": "bin/postgres-language-server" } }, "sha512-Rl7q285JjW8zj5JlNTMu2HlbuZX7O/86ynJLHGNiKA4H/h7IkBrlmE0i4ReN/Ts2tYkDJ44zF5wv5S/tTCGoQw=="],
+
+    "@postgres-language-server/cli-aarch64-apple-darwin": ["@postgres-language-server/cli-aarch64-apple-darwin@0.24.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-b2BVNqiZ9E4NEzgB7Mm3AW2m9riW1mQSgNB206FhQNLCG6MVAhnRSs8/nw4WK/v47kyZd4/Bq0ndgBHy14NOsg=="],
+
+    "@postgres-language-server/cli-aarch64-linux-gnu": ["@postgres-language-server/cli-aarch64-linux-gnu@0.24.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-ZrXrpUNdCmTH4yQXJMkxRvlzQFfg+AnN1HrbcvuzlQlwGdKSmtgzWtj9gOzyIJPrrTLVj1jnLG5qDFGE87rpGQ=="],
+
+    "@postgres-language-server/cli-aarch64-windows-msvc": ["@postgres-language-server/cli-aarch64-windows-msvc@0.24.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-P9M64IUKPxjWwpcU5TUqQ0ghYkkbSnHw03XLG5lR+snCT/YvRoloaBEANyvJUPr6MLrLJj3KcXmPDYonHrnekw=="],
+
+    "@postgres-language-server/cli-x86_64-apple-darwin": ["@postgres-language-server/cli-x86_64-apple-darwin@0.24.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-DdPNkw4OsPRZiUO745khygj6M2xl0YzymZWM2Yescb1AG1RV51cSR40qLJE1LUu7hwhuVx9V5Ckmuo+9e1dFtQ=="],
+
+    "@postgres-language-server/cli-x86_64-linux-gnu": ["@postgres-language-server/cli-x86_64-linux-gnu@0.24.0", "", { "os": "linux", "cpu": "x64" }, "sha512-V6tgZcPgUsGsXwVgOKM7WL90LVA0DenUn+rc6p6JbfevmEjcmtD7QvEmWsv/LI7x5dCrSlEmLNl8l+2598WDgg=="],
+
+    "@postgres-language-server/cli-x86_64-linux-musl": ["@postgres-language-server/cli-x86_64-linux-musl@0.24.0", "", { "os": "linux", "cpu": "x64" }, "sha512-LI1ret3ISURxBzwo4YGQLS/oOycLqbWmYEP6y0Dep98NBp0KSK/+VmXv7wlQMY1t+iWW//vjJl512FjsPLYfQQ=="],
+
+    "@postgres-language-server/cli-x86_64-windows-msvc": ["@postgres-language-server/cli-x86_64-windows-msvc@0.24.0", "", { "os": "win32", "cpu": "x64" }, "sha512-iIrpk63UxqTlCeDVZvpxL+MqTCnCU/3Op0e40FNiuP3mCtJaRfZypm7m61BA2wg+U3T4PiywZfXkfUovlYVvRA=="],
 
     "@rollup/rollup-linux-x64-gnu": ["@rollup/rollup-linux-x64-gnu@4.9.5", "", { "os": "linux", "cpu": "x64" }, "sha512-Dq1bqBdLaZ1Gb/l2e5/+o3B18+8TI9ANlA1SkejZqDgdU/jK/ThYaMPMJpVMMXy2uRHvGKbkz9vheVGdq3cJfA=="],
 

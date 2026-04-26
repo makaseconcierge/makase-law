@@ -12,8 +12,8 @@ export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001";
  * Executes `fn` inside a single database transaction attributed to
  * `actingUserId`. The attribution is set on the pinned connection via
  * `set_config('app.acting_user_id', ..., true)`, which the BEFORE
- * INSERT/UPDATE trigger on every `app._*` table reads to populate
- * `created_by`/`updated_by`/`deleted_by`.
+ * INSERT/UPDATE triggers on auditable tables read to populate
+ * `created_by`/`updated_by` and, for soft-deletable tables, `deleted_by`.
  *
  * Semantics:
  *  - All Kysely queries inside `fn` that go through `getDb()` run on the

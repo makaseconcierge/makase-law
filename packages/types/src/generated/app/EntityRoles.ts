@@ -4,10 +4,10 @@ import type { MattersMatterId } from './Matters.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app._entity_roles */
+/** Identifier type for app.entity_roles */
 export type EntityRolesMatterRole = string;
 
-/** Represents the table app._entity_roles */
+/** Represents the table app.entity_roles */
 export default interface EntityRolesTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
@@ -24,10 +24,6 @@ export default interface EntityRolesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type EntityRoles = Selectable<EntityRolesTable>;

@@ -5,10 +5,10 @@ import type { LeadsLeadId } from './Leads.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app._tasks */
+/** Identifier type for app.tasks */
 export type TasksTaskId = string;
 
-/** Represents the table app._tasks */
+/** Represents the table app.tasks */
 export default interface TasksTable {
   task_id: ColumnType<TasksTaskId, TasksTaskId | undefined, TasksTaskId>;
 
@@ -41,10 +41,6 @@ export default interface TasksTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type Tasks = Selectable<TasksTable>;

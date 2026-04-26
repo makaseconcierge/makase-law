@@ -5,10 +5,10 @@ import type { JsonValue } from '../../jsonTypes.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app._expenses */
+/** Identifier type for app.expenses */
 export type ExpensesExpenseId = string;
 
-/** Represents the table app._expenses */
+/** Represents the table app.expenses */
 export default interface ExpensesTable {
   expense_id: ColumnType<ExpensesExpenseId, ExpensesExpenseId | undefined, ExpensesExpenseId>;
 
@@ -24,7 +24,9 @@ export default interface ExpensesTable {
 
   is_reimbursable: ColumnType<boolean, boolean | undefined, boolean>;
 
-  is_billable: ColumnType<boolean, boolean | undefined, boolean>;
+  billable: ColumnType<boolean, boolean | undefined, boolean>;
+
+  no_charge: ColumnType<boolean, boolean | undefined, boolean>;
 
   receipt_path: ColumnType<string[], string[] | undefined, string[]>;
 
@@ -37,10 +39,6 @@ export default interface ExpensesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type Expenses = Selectable<ExpensesTable>;

@@ -13,7 +13,7 @@ export default interface TimeEntriesTable {
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
-  task_id: ColumnType<TasksTaskId | null, TasksTaskId | null, TasksTaskId | null>;
+  task_id: ColumnType<TasksTaskId, TasksTaskId, TasksTaskId>;
 
   invoice_id: ColumnType<InvoicesInvoiceId | null, InvoicesInvoiceId | null, InvoicesInvoiceId | null>;
 

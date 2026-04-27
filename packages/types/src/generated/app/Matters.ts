@@ -1,7 +1,7 @@
 import type { OfficesOfficeId } from './Offices.js';
 import type { TeamsTeamId } from './Teams.js';
-import type { JsonValue } from '../../jsonTypes.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { JsonValue } from '../../jsonTypes.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app._matters */
@@ -14,6 +14,8 @@ export default interface MattersTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
   team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
+
+  responsible_attorney: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
 
   title: ColumnType<string, string, string>;
 

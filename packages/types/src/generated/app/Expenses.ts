@@ -1,8 +1,9 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { TeamsTeamId } from './Teams.js';
 import type { MattersMatterId } from './Matters.js';
+import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
 import type { JsonValue } from '../../jsonTypes.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app.expenses */
@@ -14,7 +15,11 @@ export default interface ExpensesTable {
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
+  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
+
   matter_id: ColumnType<MattersMatterId | null, MattersMatterId | null, MattersMatterId | null>;
+
+  user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
 
   invoice_id: ColumnType<InvoicesInvoiceId | null, InvoicesInvoiceId | null, InvoicesInvoiceId | null>;
 

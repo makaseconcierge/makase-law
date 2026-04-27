@@ -1,4 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { MattersMatterId } from './Matters.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
 import type { JsonValue } from '../../jsonTypes.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
@@ -12,6 +13,8 @@ export default interface InvoicePaymentsTable {
   invoice_payment_id: ColumnType<InvoicePaymentsInvoicePaymentId, InvoicePaymentsInvoicePaymentId | undefined, InvoicePaymentsInvoicePaymentId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
+
+  matter_id: ColumnType<MattersMatterId, MattersMatterId, MattersMatterId>;
 
   invoice_id: ColumnType<InvoicesInvoiceId | null, InvoicesInvoiceId | null, InvoicesInvoiceId | null>;
 

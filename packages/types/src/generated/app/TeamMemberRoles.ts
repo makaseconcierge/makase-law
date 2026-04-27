@@ -14,8 +14,6 @@ export default interface TeamMemberRolesTable {
 
   team_role_id: ColumnType<TeamRolesTeamRoleId, TeamRolesTeamRoleId, TeamRolesTeamRoleId>;
 
-  functional_roles: ColumnType<string[], string[] | undefined, string[]>;
-
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;

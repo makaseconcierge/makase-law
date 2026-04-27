@@ -435,7 +435,55 @@ CREATE TABLE app.team_roles (
     office_id UUID NOT NULL REFERENCES app.offices(office_id),
     name TEXT NOT NULL,
     description TEXT NOT NULL,
-    role_config JSONB NOT NULL DEFAULT '{}'::jsonb, -- defines permissions for team owned resources {matter: {read: boolean, write: boolean}, tasks: {read: boolean, write: boolean}...}
+    role_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Per-resource action capability map. Shape:
+    --   { <resource>: { <action>: 'self' | 'team', ... }, ... }
+    -- Absence of an action key = deny. The action vocabulary is intentionally
+    -- left loose at the schema level; it will be finalized during API
+    -- development to mirror the actual endpoint set, and may grow finer
+    -- (e.g., split 'write' into 'create' / 'update', promote 'delete' /
+    -- 'send' / 'void' out of 'write' as gating needs surface). Tentative
+    -- starting point:
+    --   read, write, assign, close, approve
+    -- with per-resource subsets (e.g., matter: read/write/assign/close;
+    -- invoice: read/write/approve; entity: read/write).
+    --
+    -- Scopes are deliberately limited to 'team' and 'self' — there is no
+    -- 'office' scope. Users who need cross-team visibility (billing manager,
+    -- managing partner, compliance officer, office manager) are modeled by
+    -- adding them to every relevant team via team_member_roles. is_admin on
+    -- _employees is the only above-team bypass and is reserved for actions
+    -- that don't fit the resource/scope model (managing the office record,
+    -- defining roles, etc.).
+    --
+    -- "self" predicates are defined per-resource by the application:
+    --   _matters         responsible_attorney = user_id
+    --   tasks            assigned_to = user_id
+    --   leads            assigned_attorney_user_id = user_id
+    --   time_entries     user_id = user_id
+    --   expenses         user_id = user_id
+    --   invoices         (no self — team only)
+    --   invoice_payments (no self — team only)
+    --
+    -- Future: a "default team members" UX (auto-added to every team, optionally
+    -- hidden from listings, optionally non-removable) would bolt on as
+    -- hidden/locked columns on team_member_roles without changing this shape.
+    /*
+    {
+      matter: {
+        read:   'team' | 'self',
+        write:  'team' | 'self',
+        assign: 'team' | 'self',
+        close:  'team' | 'self'
+      },
+      invoice: {
+        read:    'team',
+        write:   'team' | 'self',
+        approve: 'team' | 'self'
+      },
+      ...
+    }
+    */
     CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
 );
 SELECT app.setup_auditable_table('team_roles');
@@ -451,7 +499,6 @@ CREATE TABLE app.team_member_roles (
     FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE CASCADE,
     team_role_id UUID NOT NULL,
     FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id) ON DELETE CASCADE,
-    functional_roles TEXT[] NOT NULL DEFAULT '{}', -- based on position role_config and is_supervisor and is_manager
     PRIMARY KEY (office_id, team_id, user_id, team_role_id)
 );
 SELECT app.setup_auditable_table('team_member_roles');
@@ -467,6 +514,8 @@ CREATE TABLE app._matters (
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id),
+    responsible_attorney UUID NOT NULL,
+    FOREIGN KEY (office_id, responsible_attorney) REFERENCES app._employees(office_id, user_id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     stage       TEXT NOT NULL DEFAULT 'consultation',
@@ -503,28 +552,24 @@ CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS 
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
 
--- MATTER STAFF (links firm employees to matters with their staffing matter_role)
-CREATE TABLE app.matter_staff (
-    office_id   UUID NOT NULL REFERENCES app.offices(office_id),
-    matter_id   UUID NOT NULL,
-    user_id     UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE,
-    FOREIGN KEY (office_id, user_id)   REFERENCES app._employees(office_id, user_id),
-    matter_role        TEXT NOT NULL DEFAULT 'support',
-    -- these roles define official roles on the matter, not job titles.
-
-    PRIMARY KEY (office_id, matter_id, user_id, matter_role),
-    CONSTRAINT matter_staff_role_check CHECK (matter_role IN (
-        'responsible_attorney', 'supervising_attorney', 'counsel', 'paralegal', 'clerk', 'support'
-    ))
+-- MATTER ACCESS (explicit access grants for non-team-member employees;
+-- team members already get access via team_member_roles, so this table is
+-- only for one-off grants. team_role_id determines the permissions the
+-- grantee gets on the matter, evaluated like a normal team_member_roles row
+-- but scoped to this single matter.)
+CREATE TABLE app.matter_access (
+    office_id    UUID NOT NULL REFERENCES app.offices(office_id),
+    matter_id    UUID NOT NULL,
+    user_id      UUID NOT NULL,
+    team_role_id UUID NOT NULL,
+    FOREIGN KEY (office_id, matter_id)    REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE,
+    FOREIGN KEY (office_id, user_id)      REFERENCES app._employees(office_id, user_id),
+    FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id),
+    PRIMARY KEY (office_id, matter_id, user_id)
 );
-SELECT app.setup_auditable_table('matter_staff');
-CREATE INDEX ON app.matter_staff(office_id, matter_id);
-CREATE INDEX ON app.matter_staff(office_id, user_id);
-
--- Enforce exactly one 'responsible' attorney per active matter
-CREATE UNIQUE INDEX ON app.matter_staff (office_id, matter_id)
-  WHERE matter_role = 'responsible_attorney';
+SELECT app.setup_auditable_table('matter_access');
+CREATE INDEX ON app.matter_access(office_id, matter_id);
+CREATE INDEX ON app.matter_access(office_id, user_id);
 
 
 -- ENTITIES (universal person/organization registry)
@@ -655,7 +700,7 @@ CREATE TABLE app.tasks (
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
     lead_id     UUID,
     FOREIGN KEY (office_id, lead_id, team_id) REFERENCES app.leads(office_id, lead_id, team_id),
     assigned_to UUID,
@@ -692,8 +737,8 @@ CREATE TABLE app.invoices (
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
-    matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id),
+    matter_id   UUID NOT NULL,
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
     status      TEXT NOT NULL DEFAULT 'new',
     notes       TEXT,
     due_date    TIMESTAMPTZ,
@@ -705,6 +750,8 @@ CREATE TABLE app.invoices (
 
     -- total_paid from payments table
 
+    CONSTRAINT invoices_team_uk UNIQUE (office_id, invoice_id, team_id),
+    CONSTRAINT invoices_matter_uk UNIQUE (office_id, invoice_id, matter_id),
     CONSTRAINT invoices_late_fee_amount_check CHECK (late_fee_amount >= 0),
     CONSTRAINT invoices_total_amount_check CHECK (total_amount >= 0),
     CONSTRAINT invoices_office_uk UNIQUE (office_id, invoice_id),
@@ -723,7 +770,7 @@ CREATE INDEX ON app.invoices(office_id, status);
 CREATE TABLE app.time_entries (
     time_entry_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id         UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
-    task_id           UUID,
+    task_id           UUID NOT NULL,
     FOREIGN KEY (office_id, task_id) REFERENCES app.tasks(office_id, task_id) ON DELETE NO ACTION,
     invoice_id        UUID,
     FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
@@ -751,8 +798,12 @@ CREATE INDEX ON app.time_entries(office_id, task_id, start_timestamp DESC);
 CREATE TABLE app.expenses (
     expense_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
+    team_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
+    user_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
     invoice_id  UUID,
     FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     amount      NUMERIC NOT NULL,
@@ -775,8 +826,10 @@ CREATE INDEX ON app.expenses(invoice_id) WHERE invoice_id IS NOT NULL;
 CREATE TABLE app.invoice_payments (
     invoice_payment_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
+    matter_id   UUID NOT NULL,
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
     invoice_id  UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE NO ACTION,
+    FOREIGN KEY (office_id, matter_id, invoice_id) REFERENCES app.invoices(office_id, matter_id, invoice_id) ON DELETE NO ACTION,
     amount      NUMERIC NOT NULL CHECK (amount > 0),
     payment_date TIMESTAMPTZ NOT NULL,
     notes TEXT,

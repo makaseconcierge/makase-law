@@ -15,7 +15,7 @@ export default interface InvoicesTable {
 
   team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
-  matter_id: ColumnType<MattersMatterId | null, MattersMatterId | null, MattersMatterId | null>;
+  matter_id: ColumnType<MattersMatterId, MattersMatterId, MattersMatterId>;
 
   status: ColumnType<string, string | undefined, string>;
 

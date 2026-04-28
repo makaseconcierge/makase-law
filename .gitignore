@@ -20,6 +20,8 @@ yarn-error.log*
 # local env files
 .env*.local
 .env*
+.env
+**/.env
 
 # other package manager files
 yarn.lock

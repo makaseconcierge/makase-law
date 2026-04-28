@@ -748,7 +748,7 @@ CREATE TABLE app.invoices (
     late_fee_amount NUMERIC NOT NULL DEFAULT 0, -- billed_amount * late_fee_rate
     total_amount NUMERIC NOT NULL DEFAULT 0, -- billed_amount + late_fee_amount
 
-    -- total_paid from payments table
+    -- total_paid from invoice_payments table
 
     CONSTRAINT invoices_team_uk UNIQUE (office_id, invoice_id, team_id),
     CONSTRAINT invoices_matter_uk UNIQUE (office_id, invoice_id, matter_id),
@@ -770,8 +770,15 @@ CREATE INDEX ON app.invoices(office_id, status);
 CREATE TABLE app.time_entries (
     time_entry_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id         UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
+    -- team_id is denormalized from tasks so the permission plugin can apply
+    -- a uniform `team_id = ANY(...)` predicate. The composite FK below
+    -- cascades on UPDATE, so a matter (and therefore task, and therefore
+    -- time_entry) moving teams propagates automatically — callers never
+    -- have to reconcile this column themselves.
+    team_id           UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     task_id           UUID NOT NULL,
-    FOREIGN KEY (office_id, task_id) REFERENCES app.tasks(office_id, task_id) ON DELETE NO ACTION,
+    FOREIGN KEY (office_id, task_id, team_id) REFERENCES app.tasks(office_id, task_id, team_id) ON UPDATE CASCADE ON DELETE NO ACTION,
     invoice_id        UUID,
     FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     user_id           UUID NOT NULL,
@@ -787,6 +794,7 @@ CREATE TABLE app.time_entries (
 );
 SELECT app.setup_auditable_table('time_entries');
 CREATE INDEX ON app.time_entries(office_id);
+CREATE INDEX ON app.time_entries(office_id, team_id);
 CREATE INDEX ON app.time_entries(office_id, task_id) WHERE task_id IS NOT NULL;
 CREATE INDEX ON app.time_entries(office_id, user_id);
 CREATE INDEX ON app.time_entries(office_id, invoice_id) WHERE invoice_id IS NOT NULL;
@@ -826,8 +834,13 @@ CREATE INDEX ON app.expenses(invoice_id) WHERE invoice_id IS NOT NULL;
 CREATE TABLE app.invoice_payments (
     invoice_payment_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
+    -- team_id is denormalized from _matters via the cascading composite FK
+    -- below so the permission plugin can apply `team_id = ANY(...)` directly.
+    -- Matter team moves propagate here automatically.
+    team_id     UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
     invoice_id  UUID,
     FOREIGN KEY (office_id, matter_id, invoice_id) REFERENCES app.invoices(office_id, matter_id, invoice_id) ON DELETE NO ACTION,
     amount      NUMERIC NOT NULL CHECK (amount > 0),
@@ -842,6 +855,7 @@ CREATE TABLE app.invoice_payments (
 );
 SELECT app.setup_auditable_table('invoice_payments');
 CREATE INDEX ON app.invoice_payments(office_id);
+CREATE INDEX ON app.invoice_payments(office_id, team_id);
 CREATE INDEX ON app.invoice_payments(invoice_id) WHERE invoice_id IS NOT NULL;
 CREATE INDEX ON app.invoice_payments(external_id) WHERE external_id IS NOT NULL;
 

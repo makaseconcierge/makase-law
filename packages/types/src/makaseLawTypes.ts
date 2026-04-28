@@ -1,14 +1,19 @@
 import type { Offices, NewOffices } from "./generated/app/Offices.js";
 import type { Employees, NewEmployees } from "./generated/app/Employees.js";
 import type { Matters, NewMatters } from "./generated/app/Matters.js";
-import type { MatterStaff, NewMatterStaff } from "./generated/app/MatterStaff.js";
+import type { Teams, NewTeams } from "./generated/app/Teams.js";
+import type { TeamRoles, NewTeamRoles } from "./generated/app/TeamRoles.js";
+import type { TeamMemberRoles, NewTeamMemberRoles } from "./generated/app/TeamMemberRoles.js";
+import type { MatterAccess, NewMatterAccess } from "./generated/app/MatterAccess.js";
+import type { Entities, NewEntities } from "./generated/app/Entities.js";
+import type { EntityRoles, NewEntityRoles } from "./generated/app/EntityRoles.js";
 import type { TimeEntries, NewTimeEntries } from "./generated/app/TimeEntries.js";
 import type { Leads, NewLeads } from "./generated/app/Leads.js";
 import type { Tasks, NewTasks } from "./generated/app/Tasks.js";
 import type { Invoices, NewInvoices } from "./generated/app/Invoices.js";
 import type { Expenses, NewExpenses } from "./generated/app/Expenses.js";
 import type { InvoicePayments, NewInvoicePayments } from "./generated/app/InvoicePayments.js";
-import type { Forms, NewForms } from "./generated/app/Forms.js";
+import type { UserProfiles } from "./generated/app/UserProfiles.js";
 import type { Users } from "./generated/auth/Users.js";
 
 /**
@@ -41,9 +46,28 @@ export type Matter = Matters;
 export type NewMatter = Omit<NewMatters, AuditColumns | "office_id">;
 export type MatterPatch = Partial<Omit<Matter, AuditColumns | "matter_id" | "office_id">>;
 
-export type MatterStaffMember = MatterStaff;
-export type NewMatterStaffMember = Omit<NewMatterStaff, AuditColumns | "office_id">;
-export type MatterStaffPatch = Partial<Omit<MatterStaffMember, AuditColumns | "office_id" | "matter_id" | "user_id" | "role">>;
+export type Team = Teams;
+export type NewTeam = Omit<NewTeams, AuditColumns | "office_id">;
+export type TeamPatch = Partial<Omit<Team, AuditColumns | "team_id" | "office_id">>;
+
+export type TeamRole = TeamRoles;
+export type NewTeamRole = Omit<NewTeamRoles, AuditColumns | "office_id">;
+export type TeamRolePatch = Partial<Omit<TeamRole, AuditColumns | "team_role_id" | "office_id">>;
+
+// Composite-PK link tables: nothing to patch once a row is created — the
+// row itself is the membership. Surface only the readable + insert shapes.
+export type TeamMemberRole = TeamMemberRoles;
+export type NewTeamMemberRole = Omit<NewTeamMemberRoles, AuditColumns | "office_id">;
+
+export type MatterAccessGrant = MatterAccess;
+export type NewMatterAccessGrant = Omit<NewMatterAccess, AuditColumns | "office_id">;
+
+export type Entity = Entities;
+export type NewEntity = Omit<NewEntities, AuditColumns | "office_id">;
+export type EntityPatch = Partial<Omit<Entity, AuditColumns | "entity_id" | "office_id">>;
+
+export type EntityRoleLink = EntityRoles;
+export type NewEntityRoleLink = Omit<NewEntityRoles, AuditColumns | "office_id">;
 
 export type TimeEntry = TimeEntries;
 export type NewTimeEntry = Omit<NewTimeEntries, AuditColumns | "office_id">;
@@ -69,8 +93,6 @@ export type InvoicePayment = InvoicePayments;
 export type NewInvoicePayment = Omit<NewInvoicePayments, AuditColumns | "office_id">;
 export type InvoicePaymentPatch = Partial<Omit<InvoicePayment, AuditColumns | "invoice_payment_id" | "office_id">>;
 
-export type Form = Forms;
-export type NewForm = Omit<NewForms, AuditColumns | "office_id">;
-export type FormPatch = Partial<Omit<Form, AuditColumns | "form_id" | "office_id">>;
+export type UserProfile = UserProfiles;
 
 export type AuthUser = Users;

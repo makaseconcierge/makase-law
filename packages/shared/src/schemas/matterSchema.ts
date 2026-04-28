@@ -40,11 +40,15 @@ const matterFieldsSchema = z.object({
 
 /**
  * Runtime validator for POST payloads that create a new matter.
- * `office_id` is omitted — it comes from the route param.
+ * `office_id` is omitted — it comes from the route param. `team_id` and
+ * `responsible_attorney` are required because the matter row constrains
+ * to a single team and a single responsible attorney from row creation.
  */
 export const NewMatterSchema = matterFieldsSchema
   .extend({
     title: z.string().min(1).max(300),
+    team_id: z.uuid(),
+    responsible_attorney: z.uuid(),
   })
   .strict() satisfies z.ZodType<NewMatter>;
 
@@ -52,10 +56,14 @@ export const NewMatterSchema = matterFieldsSchema
  * Runtime validator for PATCH payloads to an existing matter. Callers
  * who want to archive should use the dedicated (future)
  * `matters.archive()` service method; `archived_at` is intentionally
- * not patchable here.
+ * not patchable here. Reassigning a matter to a different team is
+ * intentionally not supported via PATCH — too many invariants (tasks,
+ * invoices, expenses re-key on team_id) — and would be a dedicated
+ * service method.
  */
 export const MatterPatchSchema = matterFieldsSchema
   .extend({
     title: z.string().min(1).max(300).optional(),
+    responsible_attorney: z.uuid().optional(),
   })
   .strict() satisfies z.ZodType<MatterPatch>;

@@ -3,14 +3,24 @@ import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["userService"]);
 
+/**
+ * Offices the user is currently an active employee of, plus the display
+ * fields the office switcher needs. Permissions are resolved per-office
+ * at request time (see `employeeService.getRoleConfig`), so this is a
+ * deliberately thin payload.
+ */
 export async function listOffices(user_id: string) {
   logger.trace("Listing offices", { user_id });
   return getDb()
     .selectFrom("employees")
     .where("employees.user_id", "=", user_id)
     .innerJoin("offices", "employees.office_id", "offices.office_id")
-    .selectAll("employees")
-    .select(["name", "logo", "role_config"])
+    .select([
+      "employees.office_id",
+      "employees.is_admin",
+      "offices.name",
+      "offices.logo",
+    ])
     .execute();
 }
 

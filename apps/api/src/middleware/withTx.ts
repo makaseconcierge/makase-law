@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import { createMiddleware } from "hono/factory";
 import { runAs } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
 
@@ -12,7 +12,7 @@ import type { AppEnv } from "@/honoEnv";
  * If a GET ever needs a consistent snapshot across multiple reads, wrap
  * the handler body explicitly in `runAs(...)`.
  */
-export const withTx: MiddlewareHandler<AppEnv> = async (c, next) => {
+export const withTx = createMiddleware<AppEnv>(async (c, next) => {
   if (c.req.method === "GET") return next();
   await runAs(c.get("user_id"), () => next());
-};
+});

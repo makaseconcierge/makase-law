@@ -20,6 +20,5 @@ export const OfficePatchSchema = z
     email: z.email().nullable().optional(),
     website: z.url().nullable().optional(),
     logo: z.string().nullable().optional(),
-    role_config: z.record(z.string(), z.array(z.string())).optional(),
   })
   .strict() satisfies z.ZodType<OfficePatch>;

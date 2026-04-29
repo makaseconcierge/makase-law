@@ -1,23 +1,3 @@
 export type { default as DB } from "./generated/Database.js";
-export * from "./jsonTypes.js";
-export * from "./roleConfig.js";
-export * from "./makaseLawTypes.js";
-
-export * from "./generated/app/AuditLog.js";
-export * from "./generated/app/Offices.js";
-export * from "./generated/app/Matters.js";
-export * from "./generated/app/MatterAccess.js";
-export * from "./generated/app/Employees.js";
-export * from "./generated/app/Entities.js";
-export * from "./generated/app/EntityRoles.js";
-export * from "./generated/app/Expenses.js";
-export * from "./generated/app/InvoicePayments.js";
-export * from "./generated/app/Invoices.js";
-export * from "./generated/app/Leads.js";
-export * from "./generated/app/Tasks.js";
-export * from "./generated/app/Teams.js";
-export * from "./generated/app/TeamRoles.js";
-export * from "./generated/app/TeamMemberRoles.js";
-export * from "./generated/app/TimeEntries.js";
-export * from "./generated/app/UserProfiles.js";
-export * from "./generated/auth/Users.js";
+export * from "./json-types.js";
+export * from "./makase-types.js";

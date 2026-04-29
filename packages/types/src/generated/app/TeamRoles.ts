@@ -1,5 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
-import type { JsonValue } from '../../jsonTypes.js';
+import type { RoleConfig } from '../../custom/RoleConfig.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
@@ -16,7 +16,7 @@ export default interface TeamRolesTable {
 
   description: ColumnType<string, string, string>;
 
-  role_config: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
+  role_config: ColumnType<RoleConfig, RoleConfig | undefined, RoleConfig>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

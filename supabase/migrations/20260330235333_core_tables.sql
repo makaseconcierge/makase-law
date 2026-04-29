@@ -457,7 +457,7 @@ CREATE TABLE app.team_roles (
     -- defining roles, etc.).
     --
     -- "self" predicates are defined per-resource by the application:
-    --   _matters         responsible_attorney = user_id
+    --   _matters         responsible_attorney_id = user_id
     --   tasks            assigned_to = user_id
     --   leads            assigned_attorney_user_id = user_id
     --   time_entries     user_id = user_id
@@ -514,8 +514,10 @@ CREATE TABLE app._matters (
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id),
-    responsible_attorney UUID NOT NULL,
-    FOREIGN KEY (office_id, responsible_attorney) REFERENCES app._employees(office_id, user_id),
+    responsible_attorney_id UUID NOT NULL,
+    FOREIGN KEY (office_id, responsible_attorney_id) REFERENCES app._employees(office_id, user_id),
+    supervising_attorney_id UUID NOT NULL,
+    FOREIGN KEY (office_id, supervising_attorney_id) REFERENCES app._employees(office_id, user_id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     stage       TEXT NOT NULL DEFAULT 'consultation',

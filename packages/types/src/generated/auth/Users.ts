@@ -1,4 +1,4 @@
-import type { JsonValue } from '../../jsonTypes.js';
+import type { JsonValue } from '../../json-types.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for auth.users */

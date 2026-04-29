@@ -120,7 +120,7 @@ Use `runAsSystem(fn)` from `@makase-law/shared` for unattended writes. Audit row
 
 Two separate mechanisms attach people to matters, and the distinction is intentional:
 
-- **`matter_staff`** attaches **firm employees** to matters with a staffing role (`responsible_attorney`, `supervising_attorney`, `counsel`, `paralegal`, `clerk`, `support`). A unique index enforces exactly one responsible attorney per matter. This is the mechanism for "who at our firm is working this case."
+- **`matter_staff`** attaches **firm employees** to matters with a staffing role (`responsible_attorney_id`, `supervising_attorney`, `counsel`, `paralegal`, `clerk`, `support`). A unique index enforces exactly one responsible attorney per matter. This is the mechanism for "who at our firm is working this case."
 - **`entity_roles`** attaches **external entities** to matters with a role (`client`, `prospective_client`, `opposing_party`, `witness`, `expert`, `attorney`, `other`). The `'attorney'` role here refers to external counsel — opposing, co-counsel from another firm, etc.
 
 The `matter_role` column on `matter_staff` describes position on the matter team, not job title.

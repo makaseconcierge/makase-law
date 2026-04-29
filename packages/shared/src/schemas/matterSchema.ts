@@ -41,14 +41,15 @@ const matterFieldsSchema = z.object({
 /**
  * Runtime validator for POST payloads that create a new matter.
  * `office_id` is omitted — it comes from the route param. `team_id` and
- * `responsible_attorney` are required because the matter row constrains
+ * `responsible_attorney_id` are required because the matter row constrains
  * to a single team and a single responsible attorney from row creation.
  */
 export const NewMatterSchema = matterFieldsSchema
   .extend({
     title: z.string().min(1).max(300),
     team_id: z.uuid(),
-    responsible_attorney: z.uuid(),
+    responsible_attorney_id: z.uuid(),
+    supervising_attorney_id: z.uuid(),
   })
   .strict() satisfies z.ZodType<NewMatter>;
 
@@ -64,6 +65,6 @@ export const NewMatterSchema = matterFieldsSchema
 export const MatterPatchSchema = matterFieldsSchema
   .extend({
     title: z.string().min(1).max(300).optional(),
-    responsible_attorney: z.uuid().optional(),
+    description: z.string().optional(),
   })
   .strict() satisfies z.ZodType<MatterPatch>;

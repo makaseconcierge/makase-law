@@ -1,5 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
-import type { JsonValue } from '../../jsonTypes.js';
+import type { JsonValue } from '../../json-types.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 

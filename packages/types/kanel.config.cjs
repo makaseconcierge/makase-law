@@ -65,7 +65,7 @@ module.exports = {
             {
               name: "JsonValue",
               isDefault: false,
-              path: "../../jsonTypes",
+              path: "../../json-types",
               isAbsolute: true,
               importAsType: true,
             },
@@ -77,7 +77,7 @@ module.exports = {
             {
               name: "JsonValue",
               isDefault: false,
-              path: "../../jsonTypes",
+              path: "../../json-types",
               isAbsolute: true,
               importAsType: true,
             },
@@ -86,16 +86,16 @@ module.exports = {
       },
 
       getPropertyMetadata: (property, details, generateFor, builtinMetadata) => {
-        if (property.name === "role_config" && details.name === "_offices") {
+        if (property.name === "role_config" && details.name === "team_roles") {
           return {
             ...builtinMetadata,
             typeOverride: {
-              name: "OfficeRoleConfig",
+              name: "RoleConfig",
               typeImports: [
                 {
-                  name: "OfficeRoleConfig",
+                  name: "RoleConfig",
                   isDefault: false,
-                  path: "../../officeRoleConfig",
+                  path: "../../custom/RoleConfig",
                   isAbsolute: true,
                   importAsType: true,
                 },

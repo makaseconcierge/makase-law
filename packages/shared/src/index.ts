@@ -11,3 +11,5 @@ export * as employees from "./services/employeeService";
 export * as users from "./services/userService";
 
 export * as schemas from "./schemas";
+
+export type { Permissions } from "./services/employeeService";

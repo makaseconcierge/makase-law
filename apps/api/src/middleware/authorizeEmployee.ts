@@ -23,10 +23,10 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
 
-  const [employee, office, perms] = await Promise.all([
+  const [employee, office, permissions] = await Promise.all([
     employees.get(office_id, authUser.id),
     offices.get(office_id),
-    employees.getRoleConfig(office_id, authUser.id),
+    employees.getPermissions(office_id, authUser.id),
   ]);
   if (!employee || !office) {
     return c.json(
@@ -38,8 +38,7 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
   c.set("office_id", office.office_id);
   c.set("office", office);
   c.set("employee", employee);
-  c.set("roleConfig", perms.roleConfig);
-  c.set("teamIds", perms.teamIds);
+  c.set("permissions", permissions);
 
   await next();
 });

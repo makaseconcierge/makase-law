@@ -15,6 +15,10 @@ export default interface EmployeesTable {
 
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
 
+  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
@@ -22,10 +26,6 @@ export default interface EmployeesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
-
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 }
 
 export type Employees = Selectable<EmployeesTable>;

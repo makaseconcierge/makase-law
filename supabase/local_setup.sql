@@ -1,0 +1,1 @@
+ALTER ROLE api WITH LOGIN PASSWORD 'api_local_dev_password';

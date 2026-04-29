@@ -1,4 +1,4 @@
-import { getDb } from "../db/dbClient";
+import { rootDb } from "../db/dbClient";
 import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["userService"]);
@@ -11,7 +11,7 @@ let logger = getLogger(["userService"]);
  */
 export async function listOffices(user_id: string) {
   logger.trace("Listing offices", { user_id });
-  return getDb()
+  return rootDb
     .selectFrom("employees")
     .where("employees.user_id", "=", user_id)
     .innerJoin("offices", "employees.office_id", "offices.office_id")
@@ -26,18 +26,20 @@ export async function listOffices(user_id: string) {
 
 export async function getProfile(user_id: string) {
   logger.trace("Getting profile", { user_id });
-  return getDb()
+  return rootDb
     .selectFrom("user_profiles")
     .selectAll()
     .where("user_id", "=", user_id)
     .executeTakeFirst();
 }
 
-export async function getWithOffices(user_id: string) {
-  logger.trace("Getting profile with offices", { user_id });
-  const [user, offices] = await Promise.all([
-    getProfile(user_id),
-    listOffices(user_id),
-  ]);
-  return { ...user, offices };
-}
+console.log(rootDb
+  .selectFrom("employees")
+  .where("employees.user_id", "=", 'user_idasddfasdfadsf')
+  .innerJoin("offices", "employees.office_id", "offices.office_id")
+  .select([
+    "employees.office_id",
+    "employees.is_admin",
+    "offices.name",
+    "offices.logo",
+  ]).compile().sql);

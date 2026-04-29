@@ -4,7 +4,7 @@ import type { Permissions } from "@makase-law/shared";
 export type AppEnv = {
   Variables: {
     authUser: {
-      id: string;
+      user_id: string;
       email?: string;
       phone?: string;
       user_metadata?: any;
@@ -14,6 +14,5 @@ export type AppEnv = {
     office: Office;
     employee: Employee;
     permissions: Permissions;
-    permittedTeamIds: string[];
   };
 };

@@ -1,10 +1,10 @@
 export { rootDb, getDb } from "./db/dbClient";
+export { authenticatedContext, getEmployeeContext } from "./context/loggedInContext";
 export {
-  runAs,
-  runAsSystem,
-  getActingUserId,
+  runAsEmployee,
+  runAsUser,
   SYSTEM_USER_ID,
-} from "./db/runAs";
+} from "./context/runAs";
 export * as matters from "./services/matterService";
 export * as offices from "./services/officeService";
 export * as employees from "./services/employeeService";

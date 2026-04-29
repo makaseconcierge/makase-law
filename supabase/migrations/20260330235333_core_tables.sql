@@ -1,17 +1,21 @@
 -- SCHEMA
 CREATE SCHEMA app;
 
+-- Dedicated connection role for the API. No login (the connection pool
+-- authenticates separately), no BYPASSRLS so all policies are enforced.
+CREATE ROLE api LOGIN NOINHERIT NOBYPASSRLS;
+
 REVOKE ALL ON SCHEMA app FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON FUNCTIONS FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
--- service_role is the API's connection role. Grant DML but not DDL or TRUNCATE.
-GRANT USAGE ON SCHEMA app TO service_role;
+-- Grant DML but not DDL or TRUNCATE to the API role.
+GRANT USAGE ON SCHEMA app TO api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
-  GRANT USAGE ON SEQUENCES TO service_role;
+  GRANT USAGE ON SEQUENCES TO api;
 
 -- EXTENSIONS
 CREATE SCHEMA IF NOT EXISTS extensions;
@@ -20,7 +24,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 -- FUNCTIONS
 --
 -- Audit attribution is driven by the per-transaction GUC `app.acting_user_id`,
--- set by the shared `runAs(user_id, fn)` helper via `set_config(..., true)`.
+-- set by the shared `runAs(office_id, user_id, fn)` helper via `set_config(..., true)`.
 -- This trigger is attached BEFORE INSERT OR UPDATE to every auditable table,
 -- overwriting created_by/updated_by so application code never has to pass
 -- them. created_at/created_by are preserved on UPDATE (you cannot rewrite
@@ -81,6 +85,12 @@ CREATE OR REPLACE FUNCTION app.acting_user_id()
 RETURNS uuid LANGUAGE sql STABLE
 SET search_path = ''
 AS $$ SELECT NULLIF(current_setting('app.acting_user_id', true), '')::uuid $$;
+
+CREATE OR REPLACE FUNCTION app.acting_office_id()
+RETURNS uuid LANGUAGE sql STABLE
+SET search_path = ''
+AS $$ SELECT NULLIF(current_setting('app.acting_office_id', true), '')::uuid $$;
+
 
 CREATE OR REPLACE FUNCTION app.prevent_delete()
 RETURNS trigger LANGUAGE plpgsql
@@ -154,9 +164,69 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION app.setup_office_rls(tbl TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  EXECUTE format(
+    'ALTER TABLE app.%I ENABLE ROW LEVEL SECURITY',
+    tbl
+  );
+  EXECUTE format(
+    $sql$
+      CREATE POLICY office_scoped_insert_%1$I ON app.%2$I FOR INSERT TO api
+      WITH CHECK (app.acting_office_id() IS NOT NULL AND office_id = app.acting_office_id())
+    $sql$,
+    tbl, tbl
+  );
+  EXECUTE format(
+    $sql$
+      CREATE POLICY office_scoped_update_%1$I ON app.%2$I FOR UPDATE TO api
+      USING (app.acting_office_id() IS NOT NULL AND office_id = app.acting_office_id())
+      WITH CHECK (office_id = app.acting_office_id())
+    $sql$,
+    tbl, tbl
+  );
+  EXECUTE format(
+    $sql$
+      CREATE POLICY office_scoped_delete_%1$I ON app.%2$I FOR DELETE TO api
+      USING (app.acting_office_id() IS NOT NULL AND office_id = app.acting_office_id())
+    $sql$,
+    tbl, tbl
+  );
+  EXECUTE format(
+    $sql$
+      CREATE POLICY office_scoped_select_%1$I ON app.%2$I FOR SELECT TO api
+      USING (
+        (
+          app.acting_office_id() IS NULL
+          AND office_id IN (SELECT app.permitted_office_ids())
+        )
+        OR (
+          app.acting_office_id() IS NOT NULL
+          AND office_id = app.acting_office_id()
+        )
+      )
+    $sql$,
+    tbl, tbl
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION app.setup_office_scoped_table(tbl TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM app.setup_auditable_table(tbl);
+  PERFORM app.setup_office_rls(tbl);
+END;
+$$;
+
 -- Adds soft-delete columns, creates active/all views, and attaches
 -- soft-delete protection triggers.
--- Call after setup_auditable_table so the soft-delete trigger can run before
+-- Call after setup_office_scoped_table so the soft-delete trigger can run before
 -- set_audit_fields checks whether the UPDATE is a no-op.
 -- Expects the underscored base table to already exist with office_id.
 -- Indexes that reference deleted_at must come AFTER this call.
@@ -389,10 +459,10 @@ CREATE INDEX ON app.audit_log (changed_by, changed_at DESC);
 CREATE INDEX ON app.audit_log (office_id, changed_at DESC);
 
 -- Lock down: only the SECURITY DEFINER trigger function (owned by
--- postgres) can INSERT. service_role can SELECT (for the audit UI).
+-- postgres) can INSERT. api can SELECT (for the audit UI).
 -- No role can UPDATE, DELETE, or TRUNCATE.
-REVOKE ALL ON app.audit_log FROM PUBLIC, service_role;
-GRANT SELECT ON app.audit_log TO service_role;
+REVOKE ALL ON app.audit_log FROM PUBLIC, api;
+GRANT SELECT ON app.audit_log TO api;
 
 
 
@@ -405,14 +475,30 @@ CREATE TABLE app._employees (
     is_admin            BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (office_id, user_id)
 );
-SELECT app.setup_auditable_table('_employees');
 SELECT app.setup_soft_delete('_employees'); -- used to deactivate employees from a firm, but they are still in the system for historical purposes and to keep tasks that were assigned to them before they were deactivated etc.
 CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
 CREATE INDEX ON app._employees(office_id) WHERE deleted_at IS NULL;
 
+CREATE OR REPLACE FUNCTION app.permitted_office_ids() 
+RETURNS SETOF uuid LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = ''
+AS $$
+  SELECT office_id 
+  FROM app._employees 
+  WHERE user_id = (SELECT app.acting_user_id()) AND deleted_at IS NULL;
+$$;
+
+-- RLS policy expressions invoke these; api must be able to call them.
+GRANT EXECUTE ON FUNCTION app.acting_user_id() TO api;
+GRANT EXECUTE ON FUNCTION app.acting_office_id() TO api;
+GRANT EXECUTE ON FUNCTION app.permitted_office_ids() TO api;
+
+SELECT app.setup_office_scoped_table('_employees');
+
+
 
 -- now that employees table is setup, we can finish setting up the offices table
-SELECT app.setup_auditable_table('offices');
+SELECT app.setup_office_scoped_table('offices');
 
 
 -- TEAMS
@@ -423,7 +509,7 @@ CREATE TABLE app.teams (
     description TEXT NOT NULL DEFAULT '',
     CONSTRAINT teams_office_uk UNIQUE (office_id, team_id)
 );
-SELECT app.setup_auditable_table('teams');
+SELECT app.setup_office_scoped_table('teams');
 -- no soft delete because we nothing should be tied to a deleted team and data in the team table is just for display purposes.
 -- anything tied to a team will need to be reassigned to a new team before the team can be deleted
 CREATE INDEX ON app.teams(office_id);
@@ -486,7 +572,7 @@ CREATE TABLE app.team_roles (
     */
     CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
 );
-SELECT app.setup_auditable_table('team_roles');
+SELECT app.setup_office_scoped_table('team_roles');
 CREATE INDEX ON app.team_roles(office_id);
 
 
@@ -501,7 +587,7 @@ CREATE TABLE app.team_member_roles (
     FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id) ON DELETE CASCADE,
     PRIMARY KEY (office_id, team_id, user_id, team_role_id)
 );
-SELECT app.setup_auditable_table('team_member_roles');
+SELECT app.setup_office_scoped_table('team_member_roles');
 CREATE INDEX ON app.team_member_roles(office_id);
 CREATE INDEX ON app.team_member_roles(office_id, team_id);
 CREATE INDEX ON app.team_member_roles(office_id, user_id);
@@ -547,7 +633,7 @@ CREATE TABLE app._matters (
     )),
     CONSTRAINT matters_archived_check CHECK ((archived_at IS NULL) = (archived_by IS NULL))
 );
-SELECT app.setup_auditable_table('_matters');
+SELECT app.setup_office_scoped_table('_matters');
 SELECT app.setup_soft_delete('_matters');
 CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS NULL;
@@ -567,7 +653,7 @@ CREATE TABLE app.entities (
     CONSTRAINT entities_office_uk UNIQUE (office_id, entity_id),
     CONSTRAINT entities_type_check CHECK (entity_type IN ('individual', 'organization'))
 );
-SELECT app.setup_auditable_table('entities');
+SELECT app.setup_office_scoped_table('entities');
 CREATE INDEX ON app.entities(office_id);
 CREATE INDEX ON app.entities(email);
 CREATE INDEX ON app.entities(phone);
@@ -588,7 +674,7 @@ CREATE TABLE app.entity_roles (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
-SELECT app.setup_auditable_table('entity_roles');
+SELECT app.setup_office_scoped_table('entity_roles');
 CREATE INDEX ON app.entity_roles(matter_id);
 
 
@@ -666,7 +752,7 @@ CREATE TABLE app.leads (
         fee_agreement_status IS NULL OR fee_agreement_status IN ('sent', 'accepted', 'declined')
     )
 );
-SELECT app.setup_auditable_table('leads');
+SELECT app.setup_office_scoped_table('leads');
 CREATE INDEX ON app.leads(office_id);
 CREATE INDEX ON app.leads(office_id, team_id);
 CREATE INDEX ON app.leads(office_id, stage);
@@ -705,7 +791,7 @@ CREATE TABLE app.tasks (
     )
 
 );
-SELECT app.setup_auditable_table('tasks');
+SELECT app.setup_office_scoped_table('tasks');
 CREATE INDEX ON app.tasks(office_id);
 CREATE INDEX ON app.tasks(office_id, team_id);
 CREATE INDEX ON app.tasks(matter_id) WHERE matter_id IS NOT NULL;
@@ -742,7 +828,7 @@ CREATE TABLE app.invoices (
         'new', 'approved', 'sent', 'paid', 'closed'
     ))
 );
-SELECT app.setup_auditable_table('invoices');
+SELECT app.setup_office_scoped_table('invoices');
 CREATE INDEX ON app.invoices(office_id);
 CREATE INDEX ON app.invoices(office_id, team_id);
 CREATE INDEX ON app.invoices(matter_id) WHERE matter_id IS NOT NULL;
@@ -775,7 +861,7 @@ CREATE TABLE app.time_entries (
     CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id),
     CONSTRAINT time_entries_timestamp_check CHECK (start_timestamp < end_timestamp)
 );
-SELECT app.setup_auditable_table('time_entries');
+SELECT app.setup_office_scoped_table('time_entries');
 CREATE INDEX ON app.time_entries(office_id);
 CREATE INDEX ON app.time_entries(office_id, team_id);
 CREATE INDEX ON app.time_entries(office_id, task_id) WHERE task_id IS NOT NULL;
@@ -807,7 +893,7 @@ CREATE TABLE app.expenses (
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
-SELECT app.setup_auditable_table('expenses');
+SELECT app.setup_office_scoped_table('expenses');
 CREATE INDEX ON app.expenses(office_id);
 CREATE INDEX ON app.expenses(matter_id) WHERE matter_id IS NOT NULL;
 CREATE INDEX ON app.expenses(invoice_id) WHERE invoice_id IS NOT NULL;
@@ -836,12 +922,26 @@ CREATE TABLE app.invoice_payments (
 
     CONSTRAINT invoice_payments_office_uk UNIQUE (office_id, invoice_payment_id)
 );
-SELECT app.setup_auditable_table('invoice_payments');
+SELECT app.setup_office_scoped_table('invoice_payments');
 CREATE INDEX ON app.invoice_payments(office_id);
 CREATE INDEX ON app.invoice_payments(office_id, team_id);
 CREATE INDEX ON app.invoice_payments(invoice_id) WHERE invoice_id IS NOT NULL;
 CREATE INDEX ON app.invoice_payments(external_id) WHERE external_id IS NOT NULL;
 
+
+
+ALTER TABLE app.user_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_profiles_policy ON app.user_profiles FOR ALL TO api
+    USING (
+      user_id = app.acting_user_id()
+      OR user_id IN (
+        SELECT e.user_id
+        FROM app._employees e
+        WHERE e.office_id IN (SELECT * FROM app.permitted_office_ids())
+      )
+    )
+    WITH CHECK (user_id = app.acting_user_id());
 
 -- SYSTEM USER SEED
 -- Unattended writes (cron, migrations, admin scripts) attribute to this

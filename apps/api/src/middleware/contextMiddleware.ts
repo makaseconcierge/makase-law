@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { runAs } from "@makase-law/shared";
+import { runAsEmployee, runAsUser } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
 
 /**
@@ -12,7 +12,10 @@ import type { AppEnv } from "@/honoEnv";
  * If a GET ever needs a consistent snapshot across multiple reads, wrap
  * the handler body explicitly in `runAs(...)`.
  */
-export const withTx = createMiddleware<AppEnv>(async (c, next) => {
-  if (c.req.method === "GET") return next();
-  await runAs(c.get("user_id"), () => next());
+export const withEmployeeContext = createMiddleware<AppEnv>(async (c, next) => {
+  await runAsEmployee(c.get("employee"), () => next());
+});
+
+export const withUserContext = createMiddleware<AppEnv>(async (c, next) => {
+  await runAsUser(c.get("user_id"), () => next());
 });

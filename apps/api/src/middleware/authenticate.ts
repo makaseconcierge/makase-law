@@ -16,12 +16,11 @@ export const authenticate = createMiddleware<AppEnv>(async (c, next) => {
     }
 
     c.set("authUser", {
-      id: payload.sub,
+      user_id: payload.sub,
       email: typeof payload.email === "string" ? payload.email : undefined,
       phone: typeof payload.phone === "string" ? payload.phone : undefined,
       user_metadata: payload.user_metadata,
     });
-    c.set("user_id", payload.sub);
   } catch (e) {
     return c.json({ error: "unauthenticated", message: "Please Login Again" }, 401);
   }

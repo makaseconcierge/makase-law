@@ -1,6 +1,29 @@
 import { createMiddleware } from "hono/factory";
-import { employees, offices } from "@makase-law/shared";
+import { employees } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
+import { getLogger } from "@logtape/logtape";
+
+const logger = getLogger(["authorizeEmployeeMiddleware"]);
+
+
+function doublCheckOfficeIds(data: any, office_id: string) {
+  if (Array.isArray(data)) {
+      for (let i = 0; i < data.length; i++) {
+          if (!doublCheckOfficeIds(data[i], office_id)) return false;
+      }
+  } else if (!!data && typeof data === 'object') {
+      if (data.office_id !== undefined && data.office_id !== office_id) {
+          return false;
+      }
+      for (const key in data) {
+        if (key && Object.hasOwn(data, key)) {
+          if (!doublCheckOfficeIds(data[key], office_id)) return false;
+        }
+      }
+  }
+  return true;
+}
+
 
 /**
  * Resolves the request actor's employment in the URL-scoped office,
@@ -23,22 +46,29 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
 
-  const [employee, office, permissions] = await Promise.all([
-    employees.get(office_id, authUser.id),
-    offices.get(office_id),
-    employees.getPermissions(office_id, authUser.id),
+  const [employee, permissions] = await Promise.all([
+    employees.get(office_id, authUser.user_id),
+    employees.getPermissions(office_id, authUser.user_id),
   ]);
-  if (!employee || !office) {
+  if (!employee) {
     return c.json(
       { code: "unauthorized", message: "You do not have access to this office" },
       403,
     );
   }
 
-  c.set("office_id", office.office_id);
-  c.set("office", office);
   c.set("employee", employee);
   c.set("permissions", permissions);
 
   await next();
+
+  const clonedResp = c.res.clone().json();
+  const allValidOffices = doublCheckOfficeIds(clonedResp, employee.office_id);
+  if (!allValidOffices) {
+    logger.error("Invalid offices found in response", { response: clonedResp });
+    return c.json(
+      { code: "unauthorized", message: "You do not have access to this office" },
+      403,
+    );
+  }
 });

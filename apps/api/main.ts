@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import officeRoutes from "./src/routes/office";
 import { authenticate } from "./src/middleware/authenticate";
-import { withTx } from "./src/middleware/withTx";
 import userRoutes from "./src/routes/user";
 import type { AppEnv } from "./src/honoEnv";
 
@@ -27,7 +26,6 @@ app.use(
 );
 
 app.use(authenticate);
-app.use(withTx);
 app.route("/office/:office_id", officeRoutes);
 app.route("/my", userRoutes);
 

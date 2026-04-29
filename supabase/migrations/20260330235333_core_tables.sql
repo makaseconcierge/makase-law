@@ -552,26 +552,6 @@ CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS 
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
 
--- MATTER ACCESS (explicit access grants for non-team-member employees;
--- team members already get access via team_member_roles, so this table is
--- only for one-off grants. team_role_id determines the permissions the
--- grantee gets on the matter, evaluated like a normal team_member_roles row
--- but scoped to this single matter.)
-CREATE TABLE app.matter_access (
-    office_id    UUID NOT NULL REFERENCES app.offices(office_id),
-    matter_id    UUID NOT NULL,
-    user_id      UUID NOT NULL,
-    team_role_id UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id)    REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE,
-    FOREIGN KEY (office_id, user_id)      REFERENCES app._employees(office_id, user_id),
-    FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id),
-    PRIMARY KEY (office_id, matter_id, user_id)
-);
-SELECT app.setup_auditable_table('matter_access');
-CREATE INDEX ON app.matter_access(office_id, matter_id);
-CREATE INDEX ON app.matter_access(office_id, user_id);
-
-
 -- ENTITIES (universal person/organization registry)
 CREATE TABLE app.entities (
     entity_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -714,6 +694,7 @@ CREATE TABLE app.tasks (
     no_charge BOOLEAN NOT NULL DEFAULT FALSE,
 
     CONSTRAINT tasks_office_uk UNIQUE (office_id, task_id),
+    CONSTRAINT tasks_team_uk UNIQUE (office_id, task_id, team_id),
     CONSTRAINT tasks_status_check CHECK (status IN (
         'pending', 'ready', 'active', 'done'
     )),

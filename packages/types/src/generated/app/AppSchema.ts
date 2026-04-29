@@ -8,7 +8,6 @@ import type { default as InvoicePaymentsTable } from './InvoicePayments.js';
 import type { default as ExpensesTable } from './Expenses.js';
 import type { default as TimeEntriesTable } from './TimeEntries.js';
 import type { default as InvoicesTable } from './Invoices.js';
-import type { default as MatterAccessTable } from './MatterAccess.js';
 import type { default as TasksTable } from './Tasks.js';
 import type { default as TeamsTable } from './Teams.js';
 import type { default as LeadsTable } from './Leads.js';
@@ -36,8 +35,6 @@ export default interface AppSchema {
   time_entries: TimeEntriesTable;
 
   invoices: InvoicesTable;
-
-  matter_access: MatterAccessTable;
 
   tasks: TasksTable;
 

@@ -1,4 +1,5 @@
 import type { OfficesOfficeId } from './Offices.js';
+import type { TeamsTeamId } from './Teams.js';
 import type { TasksTaskId } from './Tasks.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
@@ -12,6 +13,8 @@ export default interface TimeEntriesTable {
   time_entry_id: ColumnType<TimeEntriesTimeEntryId, TimeEntriesTimeEntryId | undefined, TimeEntriesTimeEntryId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
+
+  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
   task_id: ColumnType<TasksTaskId, TasksTaskId, TasksTaskId>;
 

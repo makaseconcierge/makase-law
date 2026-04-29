@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { employees } from "@makase-law/shared";
+import { loggedInUserService } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
 import { getLogger } from "@logtape/logtape";
 
@@ -47,8 +47,8 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   const [employee, permissions] = await Promise.all([
-    employees.get(office_id, authUser.user_id),
-    employees.getPermissions(office_id, authUser.user_id),
+    loggedInUserService.getEmploymentAtOffice(office_id),
+    loggedInUserService.getPermissionsAtOffice(office_id),
   ]);
   if (!employee) {
     return c.json(

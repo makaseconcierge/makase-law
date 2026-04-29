@@ -5,11 +5,8 @@ export {
   runAsUser,
   SYSTEM_USER_ID,
 } from "./context/runAs";
-export * as matters from "./services/matterService";
-export * as offices from "./services/officeService";
-export * as employees from "./services/employeeService";
-export * as users from "./services/userService";
+export * as matters from "./services/office-scoped/matterService";
+export * as offices from "./services/office-scoped/officeService";
+export * as loggedInUserService from "./services/user-scoped/logged-in-user.service";
 
 export * as schemas from "./schemas";
-
-export type { Permissions } from "./services/employeeService";

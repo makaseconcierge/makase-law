@@ -11,7 +11,7 @@
     "@hono/zod-validator": "^0.7.6",
     "@logtape/logtape": "^2.0.5",
     "@makase-law/shared": "workspace:*",
-    "@makase-law/types": "workspace:*",
+    "@makase-law/utils": "workspace:*",
     "@supabase/supabase-js": "^2.49.1",
     "hono": "^4.12.8",
     "jose": "^6.2.2",
@@ -19,6 +19,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@makase-law/types": "workspace:*",
     "@types/bun": "^1.3.11"
   }
 }

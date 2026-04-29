@@ -1,5 +1,5 @@
 import type { Employee, Office } from "@makase-law/types";
-import type { Permissions } from "@makase-law/shared";
+import type { Permissions } from "@makase-law/utils";
 
 export type AppEnv = {
   Variables: {

@@ -1,7 +1,7 @@
 import type { DB, MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import type { ExpressionBuilder, Kysely, Transaction } from "kysely";
-import { getEmployeeContext, getUserContext } from "../context/loggedInContext";
+import { getEmployeeContext, getUserContext } from "../../context/loggedInContext";
 
 const logger = getLogger(["matterService"]);
 

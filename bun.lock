@@ -14,7 +14,7 @@
         "@hono/zod-validator": "^0.7.6",
         "@logtape/logtape": "^2.0.5",
         "@makase-law/shared": "workspace:*",
-        "@makase-law/types": "workspace:*",
+        "@makase-law/utils": "workspace:*",
         "@supabase/supabase-js": "^2.49.1",
         "hono": "^4.12.8",
         "jose": "^6.2.2",
@@ -22,6 +22,7 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
+        "@makase-law/types": "workspace:*",
         "@types/bun": "^1.3.11",
       },
     },
@@ -31,6 +32,7 @@
       "dependencies": {
         "@logtape/logtape": "catalog:",
         "@makase-law/types": "workspace:*",
+        "@makase-law/utils": "workspace:*",
         "kysely-postgres-js": "^3.0.0",
         "zod": "catalog:",
       },
@@ -56,6 +58,16 @@
         "kysely": "^0.28.15",
       },
     },
+    "packages/utils": {
+      "name": "@makase-law/utils",
+      "devDependencies": {
+        "@makase-law/types": "workspace:*",
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
   },
   "catalog": {
     "@logtape/logtape": "^2.0.5",
@@ -73,6 +85,8 @@
     "@makase-law/shared": ["@makase-law/shared@workspace:packages/shared"],
 
     "@makase-law/types": ["@makase-law/types@workspace:packages/types"],
+
+    "@makase-law/utils": ["@makase-law/utils@workspace:packages/utils"],
 
     "@postgres-language-server/cli": ["@postgres-language-server/cli@0.24.0", "", { "optionalDependencies": { "@postgres-language-server/cli-aarch64-apple-darwin": "0.24.0", "@postgres-language-server/cli-aarch64-linux-gnu": "0.24.0", "@postgres-language-server/cli-aarch64-windows-msvc": "0.24.0", "@postgres-language-server/cli-x86_64-apple-darwin": "0.24.0", "@postgres-language-server/cli-x86_64-linux-gnu": "0.24.0", "@postgres-language-server/cli-x86_64-linux-musl": "0.24.0", "@postgres-language-server/cli-x86_64-windows-msvc": "0.24.0" }, "bin": { "postgres-language-server": "bin/postgres-language-server" } }, "sha512-Rl7q285JjW8zj5JlNTMu2HlbuZX7O/86ynJLHGNiKA4H/h7IkBrlmE0i4ReN/Ts2tYkDJ44zF5wv5S/tTCGoQw=="],
 
@@ -106,7 +120,7 @@
 
     "@supabase/supabase-js": ["@supabase/supabase-js@2.103.3", "", { "dependencies": { "@supabase/auth-js": "2.103.3", "@supabase/functions-js": "2.103.3", "@supabase/postgrest-js": "2.103.3", "@supabase/realtime-js": "2.103.3", "@supabase/storage-js": "2.103.3" } }, "sha512-DuPiAz5pIJsTAQCt7B6bDZrnLzlq9+/5bta/GWTsgpLn6AkuZQcmYsQHYplv4skQ8U2raKY5HASQOu4KtYq9Qw=="],
 
-    "@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
+    "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
 
     "@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
 
@@ -118,7 +132,7 @@
 
     "brace-expansion": ["brace-expansion@5.0.5", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ=="],
 
-    "bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
+    "bun-types": ["bun-types@1.3.13", "", { "dependencies": { "@types/node": "*" } }, "sha512-QXKeHLlOLqQX9LgYaHJfzdBaV21T63HhFJnvuRCcjZiaUDpbs5ED1MgxbMra71CsryN/1dAoXuJJJwIv/2drVA=="],
 
     "chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
 
@@ -261,6 +275,8 @@
     "tslib": ["tslib@2.8.1", "", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
     "type-check": ["type-check@0.4.0", "", { "dependencies": { "prelude-ls": "^1.2.1" } }, "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew=="],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "uglify-js": ["uglify-js@3.19.3", "", { "bin": { "uglifyjs": "bin/uglifyjs" } }, "sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ=="],
 

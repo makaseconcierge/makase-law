@@ -1,0 +1,13 @@
+{
+  "name": "@makase-law/utils",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@makase-law/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

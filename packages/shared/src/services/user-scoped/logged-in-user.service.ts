@@ -1,5 +1,7 @@
-import { getUserContext } from "../context/loggedInContext";
+
+import { getUserContext } from "../../context/loggedInContext";
 import { getLogger } from "@logtape/logtape";
+import { parsePermissions } from "@makase-law/utils";
 
 let logger = getLogger(["userService"]);
 
@@ -33,4 +35,33 @@ export async function getProfile() {
     .selectAll()
     .where("user_id", "=", loggedInUserId)
     .executeTakeFirst();
+}
+
+
+export async function getEmploymentAtOffice(office_id: string) {
+  const { db, loggedInUserId } = getUserContext();
+  logger.trace("Getting employee");
+  return db.selectFrom("employees")
+    .selectAll()
+    .where("office_id", "=", office_id)
+    .where("user_id", "=", loggedInUserId)
+    .executeTakeFirst();
+}
+
+export async function getPermissionsAtOffice(office_id: string) {
+  const { db, loggedInUserId } = getUserContext();
+  logger.trace("Getting permissions for office", { office_id });
+  const rows = await db
+    .selectFrom("team_member_roles as tmr")
+    .innerJoin("team_roles as tr", (join) =>
+      join
+        .onRef("tr.team_role_id", "=", "tmr.team_role_id")
+        .onRef("tr.office_id", "=", "tmr.office_id"),
+    )
+    .where("tmr.office_id", "=", office_id)
+    .where("tmr.user_id", "=", loggedInUserId)
+    .select(["tmr.team_id", "tr.role_config"])
+    .execute();
+
+  return parsePermissions(rows);
 }

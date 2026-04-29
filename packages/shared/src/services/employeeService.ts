@@ -1,5 +1,5 @@
 import type { RoleConfig } from "@makase-law/types";
-import { getDb } from "../db/dbClient";
+import { getDb } from "../db/_rootDb";
 import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["employeeService"]);

@@ -1,4 +1,4 @@
-export { rootDb } from "./db/dbClient";
+export { _rootDb } from "./db/_rootDb";
 export { authenticatedContext, getEmployeeContext } from "./context/loggedInContext";
 export {
   runAsEmployee,

@@ -1,5 +1,5 @@
 import { sql } from "kysely";
-import { _rootDb } from "../db/dbClient";
+import { _rootDb } from "../db/_rootDb";
 import { authenticatedContext, getUserContext, hasUserContext } from "./loggedInContext";
 import type { Employee } from "@makase-law/types";
 

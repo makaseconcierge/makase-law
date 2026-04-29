@@ -1,8 +1,7 @@
 import type { DB, MatterPatch, NewMatter } from "@makase-law/types";
-import { getDb } from "../db/dbClient";
 import { getLogger } from "@logtape/logtape";
-import type { ExpressionBuilder } from "kysely";
-import { getEmployeeContext } from "../context/loggedInContext";
+import type { ExpressionBuilder, Kysely, Transaction } from "kysely";
+import { getEmployeeContext, getUserContext } from "../context/loggedInContext";
 
 const logger = getLogger(["matterService"]);
 
@@ -21,19 +20,18 @@ function employeeIsPermitted() {
 export async function create(
   data: NewMatter,
 ) {
-  const { loggedInOfficeId } = getEmployeeContext();
-  logger.info("Creating new matter", { loggedInOfficeId, data });
-  return getDb()
-    .insertInto("matters")
+  const { loggedInOfficeId, db } = getEmployeeContext();
+  logger.info("Creating new matter", data);
+  return db.insertInto("matters")
     .values({ ...data, office_id: loggedInOfficeId })
     .returningAll()
     .executeTakeFirst();
 }
 
 export async function get(matter_id: string) {
+  const { db } = getEmployeeContext();
   logger.trace("Getting matter", { matter_id });
-  return getDb()
-    .selectFrom("matters")
+  return db.selectFrom("matters")
     .selectAll()
     .where(employeeIsPermitted())
     .where("matter_id", "=", matter_id)
@@ -44,9 +42,9 @@ export async function update(
   matter_id: string,
   data: MatterPatch,
 ) {
+  const { db } = getEmployeeContext();
   logger.info("Updating matter", { matter_id, data });
-  return getDb()
-    .updateTable("matters")
+  return db.updateTable("matters")
     .where(employeeIsPermitted())
     .where("matter_id", "=", matter_id)
     .set(data)
@@ -55,9 +53,9 @@ export async function update(
 }
 
 export async function list() {
+  const { db } = getEmployeeContext();
   logger.trace("Listing matters");
-  return getDb()
-    .selectFrom("matters")
+  return db.selectFrom("matters")
     .selectAll()
     .where(employeeIsPermitted())
     .execute();

@@ -1,6 +1,6 @@
 import { sql } from "kysely";
-import { rootDb } from "../db/dbClient";
-import { authenticatedContext, alreadyHasContext } from "./loggedInContext";
+import { _rootDb } from "../db/dbClient";
+import { authenticatedContext, getUserContext, hasUserContext } from "./loggedInContext";
 import type { Employee } from "@makase-law/types";
 
 /**
@@ -32,32 +32,32 @@ export async function runAsEmployee<T>(
   employee: Employee,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (alreadyHasContext()) {
-    throw new Error(
-      "runAsEmployee called inside an existing runAsEmployee scope. Only one attributed transaction scope is allowed per request.",
-    );
-  }
+  const userContext = getUserContext();
 
-  return rootDb.transaction().execute(async (trx) => {
-    await sql`
-      SELECT set_config('app.acting_user_id', ${employee.user_id}, true);
-      SELECT set_config('app.acting_office_id', ${employee.office_id}, true);
-    `.execute(trx);
-    return authenticatedContext.run({ db: trx, loggedInOfficeId: employee.office_id, loggedInUserId: employee.user_id, permittedTeamIds: [] }, fn);
-  });
+  await sql`
+    SELECT set_config('app.acting_office_id', ${employee.office_id}, true);
+  `.execute(userContext.db);
+
+  const employeeContext = {
+    ...userContext,
+    loggedInOfficeId: employee.office_id,
+    permittedTeamIds: [],
+  };
+  return authenticatedContext.run(employeeContext, fn);
 }
 
 export async function runAsUser<T>(user_id: string, fn: () => Promise<T>): Promise<T> {
-  if (alreadyHasContext()) {
+  if (hasUserContext()) {
     throw new Error(
       "runAsUser called inside an existing runAsUser scope. Only one attributed transaction scope is allowed per request.",
     );
   }
   
-  return rootDb.transaction().execute(async (trx) => {
+  return _rootDb.transaction().execute(async (trx) => {
+    const userContext = { db: trx, loggedInUserId: user_id };
     await sql`
       SELECT set_config('app.acting_user_id', ${user_id}, true);
-    `.execute(trx);
-    return authenticatedContext.run({ db: trx, loggedInUserId: user_id }, fn);
+    `.execute(userContext.db);
+    return authenticatedContext.run(userContext, fn);
   });
 }

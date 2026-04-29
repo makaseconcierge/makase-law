@@ -18,8 +18,9 @@ type EmployeeContext = {
 
 export const authenticatedContext = new AsyncLocalStorage<EmployeeContext | UserContext>();
 
-export function alreadyHasContext(): boolean {
-  return !!authenticatedContext.getStore();
+export function hasUserContext(): boolean {
+  const context = authenticatedContext.getStore();
+  return !!context && !!context.loggedInUserId && !!context.db;
 }
 
 export function getEmployeeContext(): EmployeeContext {

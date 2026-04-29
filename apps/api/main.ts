@@ -5,6 +5,7 @@ import officeRoutes from "./src/routes/office";
 import { authenticate } from "./src/middleware/authenticate";
 import userRoutes from "./src/routes/user";
 import type { AppEnv } from "./src/honoEnv";
+import { withUserContext } from "@/middleware/contextMiddleware";
 
 const app = new Hono<AppEnv>();
 
@@ -25,9 +26,10 @@ app.use(
   }),
 );
 
-app.use(authenticate);
-app.route("/office/:office_id", officeRoutes);
-app.route("/my", userRoutes);
+app.use(authenticate)
+  .use(withUserContext)
+  .route("/office/:office_id", officeRoutes)
+  .route("/my", userRoutes);
 
 export default {
   port: 8000,

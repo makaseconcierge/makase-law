@@ -62,7 +62,8 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
 
   await next();
 
-  const clonedResp = c.res.clone().json();
+  // This is a bit rediculous but good defense-in-depth until we start caring about performance
+  const clonedResp = await c.res.clone().json();
   const allValidOffices = doublCheckOfficeIds(clonedResp, employee.office_id);
   if (!allValidOffices) {
     logger.error("Invalid offices found in response", { response: clonedResp });

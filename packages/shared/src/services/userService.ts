@@ -1,4 +1,4 @@
-import { rootDb } from "../db/dbClient";
+import { getUserContext } from "../context/loggedInContext";
 import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["userService"]);
@@ -9,11 +9,12 @@ let logger = getLogger(["userService"]);
  * at request time (see `employeeService.getRoleConfig`), so this is a
  * deliberately thin payload.
  */
-export async function listOffices(user_id: string) {
-  logger.trace("Listing offices", { user_id });
-  return rootDb
+export async function listOffices() {
+  const { loggedInUserId, db } = getUserContext();
+  logger.trace("Listing offices", { loggedInUserId });
+  return db
     .selectFrom("employees")
-    .where("employees.user_id", "=", user_id)
+    .where("employees.user_id", "=", loggedInUserId)
     .innerJoin("offices", "employees.office_id", "offices.office_id")
     .select([
       "employees.office_id",
@@ -24,22 +25,12 @@ export async function listOffices(user_id: string) {
     .execute();
 }
 
-export async function getProfile(user_id: string) {
-  logger.trace("Getting profile", { user_id });
-  return rootDb
+export async function getProfile() {
+  const { loggedInUserId, db } = getUserContext();
+  logger.trace("Getting profile", { loggedInUserId });
+  return db
     .selectFrom("user_profiles")
     .selectAll()
-    .where("user_id", "=", user_id)
+    .where("user_id", "=", loggedInUserId)
     .executeTakeFirst();
 }
-
-console.log(rootDb
-  .selectFrom("employees")
-  .where("employees.user_id", "=", 'user_idasddfasdfadsf')
-  .innerJoin("offices", "employees.office_id", "offices.office_id")
-  .select([
-    "employees.office_id",
-    "employees.is_admin",
-    "offices.name",
-    "offices.logo",
-  ]).compile().sql);

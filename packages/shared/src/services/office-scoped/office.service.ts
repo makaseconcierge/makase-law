@@ -15,7 +15,10 @@ export async function get() {
 }
 
 export async function update(officePatch: OfficePatch) {
-  const { db, loggedInOfficeId } = getEmployeeContext();
+  const { db, loggedInOfficeId, isAdmin } = getEmployeeContext();
+  if (!isAdmin) {
+    throw new Error("You are not authorized to update the office");
+  }
   logger.info("Updating office", { officePatch });
   return db
     .updateTable("offices")

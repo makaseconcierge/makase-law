@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { office, schemas } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
-import { requireAdmin } from "@/middleware/requireAdmin";
 
 const officeInfoRoutes = new Hono<AppEnv>()
   .get("/", async (c) => {
@@ -11,7 +10,6 @@ const officeInfoRoutes = new Hono<AppEnv>()
   })
   .patch(
     "/",
-    requireAdmin,
     zValidator("json", schemas.OfficePatchSchema, (result, c) => {
       if (!result.success) {
         return c.json(

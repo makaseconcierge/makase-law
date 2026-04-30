@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Transaction } from "kysely";
-import type { DB } from "@makase-law/types";
+import type { DB, Permissions } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["authenticatedContext"]);
@@ -9,8 +9,10 @@ export type EmployeeContext = {
   db: Transaction<DB>,
   loggedInUserId: string,
   loggedInOfficeId: string,
-  permitTeamIds?: string[],
-  scope?: "office" | "team" | "self",
+  isAdmin: boolean,
+  isSystem: boolean,
+  permissions: Permissions,
+  teamIds: string[],
 };
 
 export type UserContext = {
@@ -32,7 +34,7 @@ export function hasEmployeeContext(): boolean {
 
 export function getEmployeeContext(): EmployeeContext {
   const context = authenticatedContext.getStore();
-  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId) {
+  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId || !context.permissions || !context.teamIds) {
     const log_id = crypto.randomUUID();
     logger.error("Need to define user / office using runAs to access database", { log_id, stack: new Error().stack });
     throw { status: 500, message: "Please contact support@makase.com with the following log ID: " + log_id };

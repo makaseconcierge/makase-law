@@ -1,4 +1,8 @@
 import { getEmployeeContext } from "./logged-in-context";
+import type { ExpressionBuilder } from "kysely";
+import type { ReferenceExpression } from "kysely";
+import type { OperandValueExpressionOrList } from "kysely";
+import type { DB } from "@makase-law/types";
 
 export type Scope = "office" | "team" | "self";
 
@@ -24,4 +28,27 @@ export function getScope(resource: string, action: string): Scope {
     throw { status: 403, message: "Unauthorized" };
   }
   return scope;
+}
+
+
+type TeamSelfTables = "matters" | "employee_teams" | "tasks" | "time_entries" | "invoices" | "expenses";
+export const buildScopeFilter = <T extends TeamSelfTables> (
+  resource: string,
+  action: string,
+  assignmentColumns: readonly ReferenceExpression<DB, T>[]
+) => {
+  const scope = getScope(resource, action);
+  return (eb: ExpressionBuilder<DB, T>) => {
+    const { loggedInOfficeId, loggedInUserId, teamIds } = getEmployeeContext();
+    const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId as OperandValueExpressionOrList<DB, T, "office_id">);
+    if (scope === "office") return isLoggedInOffice;
+
+    // self or team both allow access to the logged in user's own records so default access options include that. Then add or team access if allowed.
+    const access_options = assignmentColumns.map(columnName => eb(columnName, "=", loggedInUserId));
+    if (scope === "team" && teamIds.length) access_options.push(eb("team_id", "in", teamIds as OperandValueExpressionOrList<DB, T, "team_id">));
+    return eb.and([
+      isLoggedInOffice,
+      eb.or(access_options)
+    ]);
+  };
 }

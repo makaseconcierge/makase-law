@@ -1,40 +1,14 @@
-import type { DB, MatterPatch, NewMatter } from "@makase-law/types";
+import type { MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
-import type { ExpressionBuilder } from "kysely";
 import { getEmployeeContext } from "../../context/logged-in-context";
-import { getScope } from "../../context/scope";
+import { getScope, buildScopeFilter } from "../../context/scope";
 
 const logger = getLogger(["matterService"]);
 
 const MATTERS_RESOURCE = "matters";
 
-
-/**
- * Predicate factory used inside `selectFrom("matters").where(...)`. Reads
- * the caller's scope for `(matters, action)` and translates it into a
- * row-level filter:
- *   office → office boundary only (RLS already enforces this; included
- *            for readability)
- *   team   → office + team_id ∈ caller's teams
- *   self   → office + responsible/supervising attorney = caller
- */
-const matterIsPermitted = (action: string) => {
-  const scope = getScope(MATTERS_RESOURCE, action);
-  return (eb: ExpressionBuilder<DB, "matters">) => {
-    const { loggedInOfficeId, loggedInUserId, teamIds } = getEmployeeContext();
-    const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId);
-    if (scope === "office") return isLoggedInOffice;
-    const access_options = [
-      eb("responsible_attorney_id", "=", loggedInUserId),
-      eb("supervising_attorney_id", "=", loggedInUserId),
-    ]
-    if (scope === "team" && teamIds.length) access_options.push(eb("team_id", "in", teamIds));
-    return eb.and([
-      isLoggedInOffice,
-      eb.or(access_options)
-    ]);
-  };
-}
+const permitMatter = (action: string) =>
+  buildScopeFilter(MATTERS_RESOURCE, action, ["responsible_attorney_id", "supervising_attorney_id"]);
 
 /**
  * Deferred subquery of matter_ids the caller may access for `action` on
@@ -45,12 +19,14 @@ const matterIsPermitted = (action: string) => {
  */
 export function permittedMatterIds(action: string) {
   const { db } = getEmployeeContext();
-  return db.selectFrom("matters").select("matter_id").where(matterIsPermitted(action));
+  return db.selectFrom("matters").select("matter_id").where(permitMatter(action));
 }
 
 export async function create(data: NewMatter) {
-  getScope(MATTERS_RESOURCE, "write");
-  const { loggedInOfficeId, db } = getEmployeeContext();
+  const { db, loggedInUserId, loggedInOfficeId, teamIds } = getEmployeeContext();
+  const scope = getScope(MATTERS_RESOURCE, "create");
+  if (scope !== "office" && !teamIds.includes(data.team_id)) throw new Error("Unauthorized");
+  if (scope === "self" && data.responsible_attorney_id !== loggedInUserId) throw new Error("Unauthorized");
   logger.info("Creating new matter", data);
   return db.insertInto("matters")
     .values({ ...data, office_id: loggedInOfficeId })
@@ -63,7 +39,7 @@ export async function get(matter_id: string) {
   logger.trace("Getting matter", { matter_id });
   return db.selectFrom("matters")
     .selectAll()
-    .where(matterIsPermitted("read"))
+    .where(permitMatter("read"))
     .where("matter_id", "=", matter_id)
     .executeTakeFirst();
 }
@@ -74,7 +50,7 @@ export async function updateDetails(matter_id: string, patch: Pick<MatterPatch, 
   const { db } = getEmployeeContext();
   logger.info("Updating matter", { matter_id, patch });
   return db.updateTable("matters")
-    .where(matterIsPermitted("updateDetails"))
+    .where(permitMatter("updateDetails"))
     .where("matter_id", "=", matter_id)
     .set(patch)
     .returningAll()
@@ -93,7 +69,7 @@ export async function assignResponsibleAttorney(matter_id: string, responsible_a
   const { db } = getEmployeeContext();
   logger.info("Assigning matter", { matter_id, responsible_attorney_id });
   return db.updateTable("matters")
-    .where(matterIsPermitted("assignResponsibleAttorney"))
+    .where(permitMatter("assignResponsibleAttorney"))
     .where("matter_id", "=", matter_id)
     .set({ responsible_attorney_id })
     .returningAll()
@@ -105,6 +81,6 @@ export async function list() {
   logger.trace("Listing matters");
   return db.selectFrom("matters")
     .selectAll()
-    .where(matterIsPermitted("read"))
+    .where(permitMatter("read"))
     .execute();
 }

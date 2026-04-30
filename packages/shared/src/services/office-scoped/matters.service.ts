@@ -1,12 +1,13 @@
-import type { DB, Matter, MatterPatch, NewMatter } from "@makase-law/types";
+import type { DB, MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import type { ExpressionBuilder } from "kysely";
-import { getEmployeeContext } from "../../context/loggedInContext";
-import { getCapabilityScope } from "../../context/capabilities";
+import { getEmployeeContext } from "../../context/logged-in-context";
+import { getScope } from "../../context/scope";
 
 const logger = getLogger(["matterService"]);
 
-const CAPABILITY = "matters";
+const MATTERS_RESOURCE = "matters";
+
 
 /**
  * Predicate factory used inside `selectFrom("matters").where(...)`. Reads
@@ -17,28 +18,27 @@ const CAPABILITY = "matters";
  *   team   → office + team_id ∈ caller's teams
  *   self   → office + responsible/supervising attorney = caller
  */
-const matterIsPermitted = (action: string) =>
-  (eb: ExpressionBuilder<DB, "matters">) => {
+const matterIsPermitted = (action: string) => {
+  const scope = getScope(MATTERS_RESOURCE, action);
+  return (eb: ExpressionBuilder<DB, "matters">) => {
     const { loggedInOfficeId, loggedInUserId, teamIds } = getEmployeeContext();
-    const scope = getCapabilityScope(CAPABILITY, action);
     const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId);
     if (scope === "office") return isLoggedInOffice;
-    if (scope === "team") {
-      if (!teamIds.length) return eb.lit(false);
-      return eb.and([isLoggedInOffice, eb("team_id", "in", teamIds)]);
-    }
+    const access_options = [
+      eb("responsible_attorney_id", "=", loggedInUserId),
+      eb("supervising_attorney_id", "=", loggedInUserId),
+    ]
+    if (scope === "team" && teamIds.length) access_options.push(eb("team_id", "in", teamIds));
     return eb.and([
       isLoggedInOffice,
-      eb.or([
-        eb("responsible_attorney_id", "=", loggedInUserId),
-        eb("supervising_attorney_id", "=", loggedInUserId),
-      ]),
+      eb.or(access_options)
     ]);
   };
+}
 
 /**
  * Deferred subquery of matter_ids the caller may access for `action` on
- * the `matters` capability. Child-resource services (tasks, time_entries,
+ * the `matters` MATTERS_RESOURCE. Child-resource services (tasks, time_entries,
  * invoices accessed via a matter context) compose this into their query:
  *   .where("matter_id", "in", permittedMatterIds("read"))
  * so they inherit matter-level scope without redeclaring "self" rules.
@@ -49,7 +49,7 @@ export function permittedMatterIds(action: string) {
 }
 
 export async function create(data: NewMatter) {
-  getCapabilityScope(CAPABILITY, "write");
+  getScope(MATTERS_RESOURCE, "write");
   const { loggedInOfficeId, db } = getEmployeeContext();
   logger.info("Creating new matter", data);
   return db.insertInto("matters")

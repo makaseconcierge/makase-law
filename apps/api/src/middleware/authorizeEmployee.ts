@@ -9,7 +9,7 @@ import type { AppEnv } from "@/honoEnv";
  * `/office/:office_id` so every downstream office route runs inside
  * `runAsEmployee` with `c.get("employee")` populated. Services read
  * permissions/teams from the AsyncLocalStorage employee context via
- * `getCapabilityScope` / `getEmployeeContext`.
+ * `getScope` / `getEmployeeContext`.
  *
  * 401 if the request hasn't been authenticated yet (defense-in-depth —
  * `authenticateUser` is applied globally in `main.ts`); 403 if the

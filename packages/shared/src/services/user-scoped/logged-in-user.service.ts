@@ -1,5 +1,5 @@
 
-import { getUserContext } from "../../context/loggedInContext";
+import { getUserContext } from "../../context/logged-in-context";
 import { getLogger } from "@logtape/logtape";
 import { mergeRolePermissions } from "@makase-law/utils";
 

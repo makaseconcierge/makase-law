@@ -1,17 +1,8 @@
 import type { OfficePatch } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import { getEmployeeContext } from "../../context/logged-in-context";
-import { getScope } from "../../context/scope";
 
-const logger = getLogger(["office-service"]);
-
-const OFFICE_RESOURCE = "office";
-
-export function hasOfficePermission(permission: string) {
-  const { isAdmin, permissions } = getEmployeeContext();
-  if (isAdmin) return true;
-  return permissions?.office?.[permission];
-}
+let logger = getLogger(["officeService"]);
 
 export async function get() {
   const { db, loggedInOfficeId } = getEmployeeContext();
@@ -24,10 +15,7 @@ export async function get() {
 }
 
 export async function update(officePatch: OfficePatch) {
-  const { db, loggedInOfficeId, isAdmin, permissions } = getEmployeeContext();
-  if (getScope(OFFICE_RESOURCE, "update") !== "office") {
-    throw new Error("You are not authorized to update the office");
-  }
+  const { db, loggedInOfficeId } = getEmployeeContext();
   logger.info("Updating office", { officePatch });
   return db
     .updateTable("offices")

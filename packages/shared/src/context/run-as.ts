@@ -1,8 +1,8 @@
 import { sql } from "kysely";
 import { _rootDb } from "../db/_rootDb";
-import { authenticatedContext, getUserContext, hasEmployeeContext, hasUserContext } from "./loggedInContext";
+import { authenticatedContext, getUserContext, hasEmployeeContext, hasUserContext } from "./logged-in-context";
 import type { Employee, Permissions } from "@makase-law/types";
-import type { EmployeeContext } from "./loggedInContext";
+import type { EmployeeContext } from "./logged-in-context";
 
 /**
  * Well-known user_id for unattended processes (cron, migrations, admin
@@ -60,7 +60,7 @@ export async function runAsUser<T>(user_id: string, fn: () => Promise<T>): Promi
 /**
  * Unattended path for cron / migrations / bootstrap. Attributes writes to
  * SYSTEM and pins `acting_office_id` to `office_id` so RLS office-scoped
- * tables are writable. `getCapabilityScope` short-circuits to `'office'`
+ * tables are writable. `getScope` short-circuits to `'office'`
  * for system context, so services running under this path bypass the
  * roles/permissions map entirely.
  */

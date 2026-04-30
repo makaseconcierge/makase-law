@@ -5,8 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/client.ts",
-    "./runAs": "./src/runAs.ts"
+    "./context": "./src/context/index.ts",
+    "./schemas": "./src/schemas/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {

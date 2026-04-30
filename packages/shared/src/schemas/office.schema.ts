@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { OfficePatch } from "@makase-law/types";
-import { JsonObjectSchema } from "./jsonSchema";
+import { JsonObjectSchema } from "./json.schema";
 
 /**
  * Runtime validator for PATCH payloads to `app.offices`. Pairs with the

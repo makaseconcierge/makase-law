@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MatterPatch, NewMatter } from "@makase-law/types";
-import { JsonObjectSchema } from "./jsonSchema";
+import { JsonObjectSchema } from "./json.schema";
 
 const MATTER_STAGES = [
   "consultation",

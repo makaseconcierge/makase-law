@@ -1,3 +1,3 @@
-export { OfficePatchSchema } from "./officeSchema";
-export { MatterPatchSchema, NewMatterSchema } from "./matterSchema";
-export { JsonValueSchema, JsonObjectSchema, JsonArraySchema } from "./jsonSchema";
+export { OfficePatchSchema } from "./office.schema";
+export { MatterPatchSchema, NewMatterSchema } from "./matter.schema.";
+export { JsonValueSchema, JsonObjectSchema, JsonArraySchema } from "./json.schema";

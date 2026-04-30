@@ -1,8 +1,7 @@
 import { SQL } from "bun";
-import { Kysely, type Transaction } from "kysely";
+import { Kysely } from "kysely";
 import { PostgresJSDialect } from "kysely-postgres-js";
 import type { DB } from "@makase-law/types";
-import { getEmployeeContext } from "../context/loggedInContext";
 
 /**
  * Root pool-backed Kysely client. Used directly only by `runAs` to open

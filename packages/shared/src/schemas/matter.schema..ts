@@ -43,13 +43,14 @@ const matterFieldsSchema = z.object({
  * `office_id` is omitted — it comes from the route param. `team_id` and
  * `responsible_attorney_id` are required because the matter row constrains
  * to a single team and a single responsible attorney from row creation.
+ * `supervising_attorney_id` is optional — the DB column is nullable.
  */
 export const NewMatterSchema = matterFieldsSchema
   .extend({
     title: z.string().min(1).max(300),
     team_id: z.uuid(),
     responsible_attorney_id: z.uuid(),
-    supervising_attorney_id: z.uuid(),
+    supervising_attorney_id: z.uuid().nullable().optional(),
   })
   .strict() satisfies z.ZodType<NewMatter>;
 

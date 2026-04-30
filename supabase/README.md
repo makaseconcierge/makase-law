@@ -185,7 +185,4 @@ After editing the migration, run all three before committing.
 
 ## Known deferred items
 
-- **Syncing `auth.users` email/phone on UPDATE** — done.
-- **DB-level enforcement of `updated_by` / `created_by`** — done (`set_audit_fields` trigger + `app.acting_user_id` GUC + `runAs` in `@makase-law/shared`).
-- **`app.audit_log` with JSONB diffs** — done (see Audit log section above).
 - **RLS policies on `app`** — not added. Currently unnecessary because the schema is not exposed via PostgREST. Revisit if/when direct `supabase-js` client access is introduced.

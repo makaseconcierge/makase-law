@@ -8,7 +8,7 @@ export function mergeRolePermissions(roles: Pick<Role, "permissions">[]): Permis
     for (const [resource, actions] of Object.entries(role.permissions)) {
       if (!actions) continue;
       if (!permissions[resource]) {
-        permissions[resource] = actions;
+        permissions[resource] = {...actions};
       } else {
         for (const [action, scope] of Object.entries(actions)) {
           if (scope === 'office' || permissions[resource][action] === 'office') {

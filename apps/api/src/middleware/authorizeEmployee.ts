@@ -29,8 +29,7 @@ function doublCheckOfficeIds(data: any, office_id: string) {
  * Resolves the request actor's employment in the URL-scoped office,
  * loads the office, and computes the merged RoleConfig + team_ids for
  * the (office, user) pair. Mounted under `/office/:office_id` so every
- * downstream office route can rely on `c.get("office")`,
- * `c.get("employee")`, `c.get("roleConfig")`, and `c.get("teamIds")`.
+ * downstream office route can rely on `c.get("employee")`, `c.get("permissions")`.
  *
  * 401 if the request hasn't been authenticated yet (defense-in-depth —
  * `authenticate` is applied globally in `main.ts`); 403 if the caller

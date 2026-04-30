@@ -3,8 +3,8 @@ import type { RoleConfig } from "@makase-law/types";
 export type Permissions = {
   [resource: string]: {
     [action: string]: {
-      team_ids: Set<string>;
-      self: boolean;
+      fullAccessTeamIds: Set<string>;
+      selfAccessTeamIds: Set<string>;
     }
   }
 }
@@ -18,13 +18,13 @@ export function parsePermissions(allTeamRoles: { team_id: string; role_config: R
       for (const [action, scope] of Object.entries(actions)) {
         permissions[resource] ||= {};
         permissions[resource][action] ||= {
-          team_ids: new Set<string>(),
-          self: false,
+          fullAccessTeamIds: new Set<string>(),
+          selfAccessTeamIds: new Set<string>(),
         };
         if (scope === "team") {
-          permissions[resource][action].team_ids.add(teamId);
+          permissions[resource][action].fullAccessTeamIds.add(teamId);
         } else if (scope === "self") {
-          permissions[resource][action].self = true;
+          permissions[resource][action].selfAccessTeamIds.add(teamId);
         }
       }
     }

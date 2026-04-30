@@ -9,11 +9,13 @@ type UserContext = {
   db: Transaction<DB>,
   loggedInUserId: string,
   loggedInOfficeId?: string,
-  permittedTeamIds?: string[],
+  fullAccessTeamIds?: string[],
+  selfAccessTeamIds?: string[],
 }
 type EmployeeContext = {
   loggedInOfficeId: string,
-  permittedTeamIds: string[]
+  fullAccessTeamIds: string[],
+  selfAccessTeamIds: string[],
 } & UserContext;
 
 export const authenticatedContext = new AsyncLocalStorage<EmployeeContext | UserContext>();
@@ -25,7 +27,7 @@ export function hasUserContext(): boolean {
 
 export function getEmployeeContext(): EmployeeContext {
   const context = authenticatedContext.getStore();
-  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId || !context.permittedTeamIds) {
+  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId || !context.fullAccessTeamIds || !context.selfAccessTeamIds) {
     const log_id = crypto.randomUUID();
     logger.error("Need to define user / office using runAs to access database", { log_id, stack: new Error().stack });
     throw { status: 500, message: "Please contact support@makase.com with the following log ID: " + log_id };

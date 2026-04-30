@@ -8,13 +8,15 @@ export const requirePermission = (resource: string, action: string) =>
     const permissions = c.get("permissions");
     const employeeContext = getEmployeeContext();
 
-    const permittedTeamIds = Array.from(permissions[resource]?.[action]?.team_ids || []);
+    const fullAccessTeamIds = Array.from(permissions[resource]?.[action]?.fullAccessTeamIds || []);
+    const selfAccessTeamIds = Array.from(permissions[resource]?.[action]?.selfAccessTeamIds || []);
 
-    const hasPermission = permittedTeamIds.length > 0 || permissions[resource]?.[action]?.self;
+    const hasPermission = fullAccessTeamIds.length > 0 || selfAccessTeamIds.length > 0;
     if (!hasPermission || !employeeContext) {
       return c.json({ code: "unauthorized", message: "Unauthorized" }, 403);
     }
 
-    employeeContext.permittedTeamIds = permittedTeamIds;
+    employeeContext.fullAccessTeamIds = fullAccessTeamIds;
+    employeeContext.selfAccessTeamIds = selfAccessTeamIds;
     await next();
   });

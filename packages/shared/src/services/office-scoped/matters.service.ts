@@ -6,13 +6,19 @@ import { getEmployeeContext, getUserContext } from "../../context/loggedInContex
 const logger = getLogger(["matterService"]);
 
 function employeeIsPermitted() {
-  const { loggedInOfficeId, loggedInUserId, permittedTeamIds } = getEmployeeContext();
+  const { loggedInOfficeId, loggedInUserId, fullAccessTeamIds, selfAccessTeamIds } = getEmployeeContext();
   return (eb: ExpressionBuilder<DB, "matters">) =>
     eb.and([
       eb("office_id", "=", loggedInOfficeId),
       eb.or([
-        ...(permittedTeamIds?.length ? [eb("team_id", "in", permittedTeamIds)] : []),
-        eb("responsible_attorney_id", "=", loggedInUserId),
+        ...(fullAccessTeamIds?.length ? [eb("team_id", "in", fullAccessTeamIds)] : []),
+        ...(selfAccessTeamIds?.length ? [eb.and([
+          eb.or([
+            eb("responsible_attorney_id", "=", loggedInUserId),
+            eb("supervising_attorney_id", "=", loggedInUserId),
+          ]),
+          eb("team_id", "in", selfAccessTeamIds)
+        ])] : []),
       ])
     ])
 }

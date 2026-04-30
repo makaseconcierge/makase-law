@@ -34,6 +34,10 @@ export async function runAsEmployee<T>(
 ): Promise<T> {
   const userContext = getUserContext();
 
+  if (userContext.loggedInUserId !== employee.user_id) {
+    throw new Error("Employee context does not match user context");
+  }
+
   await sql`
     SELECT set_config('app.acting_office_id', ${employee.office_id}, true);
   `.execute(userContext.db);

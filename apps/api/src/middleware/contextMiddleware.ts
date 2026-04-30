@@ -17,5 +17,5 @@ export const withEmployeeContext = createMiddleware<AppEnv>(async (c, next) => {
 });
 
 export const withUserContext = createMiddleware<AppEnv>(async (c, next) => {
-  await runAsUser(c.get("user_id"), () => next());
+  await runAsUser(c.get("authUser").user_id, () => next());
 });

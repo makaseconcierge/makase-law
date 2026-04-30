@@ -6,8 +6,8 @@ import matterRoutes from "./matterRoutes";
 import { withEmployeeContext } from "@/middleware/contextMiddleware";
 
 const routes = new Hono<AppEnv>()
-  .use(withEmployeeContext)
   .use(authorizeEmployee)
+  .use(withEmployeeContext)
   .route("/info", officeInfoRoutes)
   .route("/matters", matterRoutes);
 

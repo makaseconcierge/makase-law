@@ -1,14 +1,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { offices, schemas } from "@makase-law/shared";
+import { office, schemas } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
 import { requireAdmin } from "@/middleware/requireAdmin";
 
 const officeInfoRoutes = new Hono<AppEnv>()
   .get("/", async (c) => {
-    const office_id = c.get("office_id");
-    const office = await offices.get(office_id);
-    return c.json(office);
+    const officeInfo = await office.get();
+    return c.json(officeInfo);
   })
   .patch(
     "/",
@@ -26,10 +25,9 @@ const officeInfoRoutes = new Hono<AppEnv>()
       }
     }),
     async (c) => {
-      const office_id = c.get("office_id");
-      const data = c.req.valid("json");
-      const office = await offices.update(office_id, data);
-      return c.json(office);
+      const officePatch = c.req.valid("json");
+      const updatedOffice = await office.update(officePatch);
+      return c.json(updatedOffice);
     },
   );
 

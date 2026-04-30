@@ -1,26 +1,26 @@
 import type { DB, MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
-import type { ExpressionBuilder, Kysely, Transaction } from "kysely";
-import { getEmployeeContext, getUserContext } from "../../context/loggedInContext";
+import type { ExpressionBuilder } from "kysely";
+import { getEmployeeContext } from "../../context/loggedInContext";
 
 const logger = getLogger(["matterService"]);
 
-function employeeIsPermitted() {
-  const { loggedInOfficeId, loggedInUserId, fullAccessTeamIds, selfAccessTeamIds } = getEmployeeContext();
-  return (eb: ExpressionBuilder<DB, "matters">) =>
-    eb.and([
-      eb("office_id", "=", loggedInOfficeId),
-      eb.or([
-        ...(fullAccessTeamIds?.length ? [eb("team_id", "in", fullAccessTeamIds)] : []),
-        ...(selfAccessTeamIds?.length ? [eb.and([
-          eb.or([
-            eb("responsible_attorney_id", "=", loggedInUserId),
-            eb("supervising_attorney_id", "=", loggedInUserId),
-          ]),
-          eb("team_id", "in", selfAccessTeamIds)
-        ])] : []),
-      ])
+const employeeIsPermitted = ({eb, and, or}: ExpressionBuilder<DB, "matters">) => {
+  const { loggedInOfficeId, loggedInUserId, permitTeamIds, scope } = getEmployeeContext();
+  const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId);
+  if (scope === "office") {
+    return isLoggedInOffice;
+  } else if (scope === "team" && permitTeamIds?.length) {
+    return and([isLoggedInOffice, eb("team_id", "in", permitTeamIds)])
+  } else  if (scope === "self") {
+    return and([
+      isLoggedInOffice,
+      or([
+        eb("responsible_attorney_id", "=", loggedInUserId),
+        eb("supervising_attorney_id", "=", loggedInUserId),
+      ]),
     ])
+  } else throw { status: 403, message: "Unauthorized" };
 }
 
 export async function create(
@@ -39,7 +39,7 @@ export async function get(matter_id: string) {
   logger.trace("Getting matter", { matter_id });
   return db.selectFrom("matters")
     .selectAll()
-    .where(employeeIsPermitted())
+    .where(employeeIsPermitted)
     .where("matter_id", "=", matter_id)
     .executeTakeFirst();
 }
@@ -51,7 +51,7 @@ export async function update(
   const { db } = getEmployeeContext();
   logger.info("Updating matter", { matter_id, data });
   return db.updateTable("matters")
-    .where(employeeIsPermitted())
+    .where(employeeIsPermitted)
     .where("matter_id", "=", matter_id)
     .set(data)
     .returningAll()
@@ -63,6 +63,6 @@ export async function list() {
   logger.trace("Listing matters");
   return db.selectFrom("matters")
     .selectAll()
-    .where(employeeIsPermitted())
+    .where(employeeIsPermitted)
     .execute();
 }

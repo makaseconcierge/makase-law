@@ -1,7 +1,8 @@
 import { sql } from "kysely";
 import { _rootDb } from "../db/_rootDb";
-import { authenticatedContext, getUserContext, hasUserContext } from "./loggedInContext";
+import { authenticatedContext, getUserContext, hasEmployeeContext, hasUserContext } from "./loggedInContext";
 import type { Employee } from "@makase-law/types";
+import type { EmployeeContext } from "./loggedInContext";
 
 /**
  * Well-known user_id for unattended processes (cron, migrations, admin
@@ -33,6 +34,9 @@ export async function runAsEmployee<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const userContext = getUserContext();
+  if (hasEmployeeContext()) {
+    throw new Error("runAsEmployee called inside an existing runAsEmployee scope. Only one attributed transaction scope is allowed per request.");
+  }
 
   if (userContext.loggedInUserId !== employee.user_id) {
     throw new Error("Employee context does not match user context");
@@ -42,10 +46,9 @@ export async function runAsEmployee<T>(
     SELECT set_config('app.acting_office_id', ${employee.office_id}, true);
   `.execute(userContext.db);
 
-  const employeeContext = {
+  const employeeContext: EmployeeContext = {
     ...userContext,
-    loggedInOfficeId: employee.office_id,
-    permittedTeamIds: [],
+    loggedInOfficeId: employee.office_id
   };
   return authenticatedContext.run(employeeContext, fn);
 }

@@ -1,18 +1,15 @@
 import type { OfficesOfficeId } from './Offices.js';
-import type { TeamsTeamId } from './Teams.js';
 import type { UsersId as auth_UsersId } from '../auth/Users.js';
-import type { TeamRolesTeamRoleId } from './TeamRoles.js';
+import type { RolesRoleId } from './Roles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Represents the table app.team_member_roles */
-export default interface TeamMemberRolesTable {
+/** Represents the table app.employee_roles */
+export default interface EmployeeRolesTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
-
-  team_id: ColumnType<TeamsTeamId, TeamsTeamId, TeamsTeamId>;
 
   user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
 
-  team_role_id: ColumnType<TeamRolesTeamRoleId, TeamRolesTeamRoleId, TeamRolesTeamRoleId>;
+  role_id: ColumnType<RolesRoleId, RolesRoleId, RolesRoleId>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -23,8 +20,8 @@ export default interface TeamMemberRolesTable {
   updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
 }
 
-export type TeamMemberRoles = Selectable<TeamMemberRolesTable>;
+export type EmployeeRoles = Selectable<EmployeeRolesTable>;
 
-export type NewTeamMemberRoles = Insertable<TeamMemberRolesTable>;
+export type NewEmployeeRoles = Insertable<EmployeeRolesTable>;
 
-export type TeamMemberRolesUpdate = Updateable<TeamMemberRolesTable>;
+export type EmployeeRolesUpdate = Updateable<EmployeeRolesTable>;

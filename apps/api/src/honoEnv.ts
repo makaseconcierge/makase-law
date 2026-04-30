@@ -1,5 +1,4 @@
-import type { Employee, Office } from "@makase-law/types";
-import type { Permissions } from "@makase-law/utils";
+import type { Employee, Office, Permissions } from "@makase-law/types";
 
 export type AppEnv = {
   Variables: {
@@ -14,5 +13,6 @@ export type AppEnv = {
     office: Office;
     employee: Employee;
     permissions: Permissions;
+    teamIds: string[];
   };
 };

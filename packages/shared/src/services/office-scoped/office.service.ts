@@ -2,7 +2,7 @@ import type { OfficePatch } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import { getEmployeeContext } from "../../context/loggedInContext";
 
-let logger = getLogger(["officeService"]);
+const logger = getLogger(["officeService"]);
 
 export async function get() {
   const { db, loggedInOfficeId } = getEmployeeContext();

@@ -86,16 +86,16 @@ module.exports = {
       },
 
       getPropertyMetadata: (property, details, generateFor, builtinMetadata) => {
-        if (property.name === "role_config" && details.name === "team_roles") {
+        if (property.name === "permissions" && details.name === "roles") {
           return {
             ...builtinMetadata,
             typeOverride: {
-              name: "RoleConfig",
+              name: "Permissions",
               typeImports: [
                 {
-                  name: "RoleConfig",
+                  name: "Permissions",
                   isDefault: false,
-                  path: "../../custom/RoleConfig",
+                  path: "../../custom/Permissions",
                   isAbsolute: true,
                   importAsType: true,
                 },

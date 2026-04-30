@@ -5,18 +5,18 @@ import { getLogger } from "@logtape/logtape";
 
 let logger = getLogger(["authenticatedContext"]);
 
-type UserContext = {
+export type EmployeeContext = {
   db: Transaction<DB>,
   loggedInUserId: string,
-  loggedInOfficeId?: string,
-  fullAccessTeamIds?: string[],
-  selfAccessTeamIds?: string[],
-}
-type EmployeeContext = {
   loggedInOfficeId: string,
-  fullAccessTeamIds: string[],
-  selfAccessTeamIds: string[],
-} & UserContext;
+  permitTeamIds?: string[],
+  scope?: "office" | "team" | "self",
+};
+
+export type UserContext = {
+  db: Transaction<DB>,
+  loggedInUserId: string,
+} & Partial<EmployeeContext>;
 
 export const authenticatedContext = new AsyncLocalStorage<EmployeeContext | UserContext>();
 
@@ -25,9 +25,14 @@ export function hasUserContext(): boolean {
   return !!context && !!context.loggedInUserId && !!context.db;
 }
 
+export function hasEmployeeContext(): boolean {
+  const context = authenticatedContext.getStore();
+  return !!context && !!context.loggedInOfficeId && !!context.loggedInUserId && !!context.db;
+}
+
 export function getEmployeeContext(): EmployeeContext {
   const context = authenticatedContext.getStore();
-  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId || !context.fullAccessTeamIds || !context.selfAccessTeamIds) {
+  if (!context || !context.db || !context.loggedInOfficeId || !context.loggedInUserId) {
     const log_id = crypto.randomUUID();
     logger.error("Need to define user / office using runAs to access database", { log_id, stack: new Error().stack });
     throw { status: 500, message: "Please contact support@makase.com with the following log ID: " + log_id };

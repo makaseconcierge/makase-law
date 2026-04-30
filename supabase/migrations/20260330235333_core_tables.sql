@@ -247,7 +247,7 @@ BEGIN
   EXECUTE format(
     'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON app.%I '
     'FOR EACH ROW EXECUTE FUNCTION app.set_soft_delete_fields()',
-    '00_soft_delete_fields', tbl
+    '00_soft_delete_fields' || tbl, tbl
   );
   EXECUTE format(
     'CREATE VIEW app.%I WITH (security_invoker = true) '
@@ -447,6 +447,7 @@ CREATE TABLE app.audit_log (
     record_pk    JSONB NOT NULL,
     op           TEXT NOT NULL CHECK (op IN ('INSERT', 'UPDATE', 'DELETE')),
     diff         JSONB NOT NULL,
+    -- not fk to employees table because this needs to survive employee deactivation and work for system-authored writes.
     changed_by   UUID NOT NULL REFERENCES app.user_profiles(user_id),
     office_id    UUID NOT NULL REFERENCES app.offices(office_id),
     -- Reference identity, not employment: audit rows must survive employee
@@ -507,7 +508,8 @@ CREATE TABLE app.teams (
     office_id UUID NOT NULL REFERENCES app.offices(office_id),
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    CONSTRAINT teams_office_uk UNIQUE (office_id, team_id)
+    CONSTRAINT teams_office_uk UNIQUE (office_id, team_id),
+    CONSTRAINT teams_name_uk UNIQUE (office_id, name)
 );
 SELECT app.setup_office_scoped_table('teams');
 -- no soft delete because we nothing should be tied to a deleted team and data in the team table is just for display purposes.
@@ -515,15 +517,30 @@ SELECT app.setup_office_scoped_table('teams');
 CREATE INDEX ON app.teams(office_id);
 
 
--- team_roles
-CREATE TABLE app.team_roles (
-    team_role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- employee_teams
+CREATE TABLE app.employee_teams (
+    office_id UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
+    user_id UUID NOT NULL,
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE CASCADE,
+    team_id UUID NOT NULL,
+    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE CASCADE,
+    PRIMARY KEY (office_id, team_id, user_id)
+);
+SELECT app.setup_office_scoped_table('employee_teams');
+CREATE INDEX ON app.employee_teams(office_id);
+CREATE INDEX ON app.employee_teams(office_id, team_id);
+CREATE INDEX ON app.employee_teams(office_id, user_id);
+
+
+-- roles
+CREATE TABLE app.roles (
+    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id UUID NOT NULL REFERENCES app.offices(office_id),
     name TEXT NOT NULL,
     description TEXT NOT NULL,
-    role_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
     -- Per-resource action capability map. Shape:
-    --   { <resource>: { <action>: 'self' | 'team', ... }, ... }
+    --   { <resource>: { <action>: 'self' | 'team' | 'office', ... }, ... }
     -- Absence of an action key = deny. The action vocabulary is intentionally
     -- left loose at the schema level; it will be finalized during API
     -- development to mirror the actual endpoint set, and may grow finer
@@ -533,65 +550,41 @@ CREATE TABLE app.team_roles (
     --   read, write, assign, close, approve
     -- with per-resource subsets (e.g., matter: read/write/assign/close;
     -- invoice: read/write/approve; entity: read/write).
-    --
-    -- Scopes are deliberately limited to 'team' and 'self' — there is no
-    -- 'office' scope. Users who need cross-team visibility (billing manager,
-    -- managing partner, compliance officer, office manager) are modeled by
-    -- adding them to every relevant team via team_member_roles. is_admin on
-    -- _employees is the only above-team bypass and is reserved for actions
-    -- that don't fit the resource/scope model (managing the office record,
-    -- defining roles, etc.).
-    --
-    -- "self" predicates are defined per-resource by the application:
-    --   _matters         responsible_attorney_id = user_id
-    --   tasks            assigned_to = user_id
-    --   leads            assigned_attorney_user_id = user_id
-    --   time_entries     user_id = user_id
-    --   expenses         user_id = user_id
-    --   invoices         (no self — team only)
-    --   invoice_payments (no self — team only)
-    --
-    -- Future: a "default team members" UX (auto-added to every team, optionally
-    -- hidden from listings, optionally non-removable) would bolt on as
-    -- hidden/locked columns on team_member_roles without changing this shape.
     /*
     {
       matter: {
-        read:   'team' | 'self',
-        write:  'team' | 'self',
-        assign: 'team' | 'self',
-        close:  'team' | 'self'
+        read:   'office'| 'team' | 'self',
+        write:  'office'| 'team' | 'self',
+        assign: 'office'| 'team' | 'self',
+        close:  'office'| 'team' | 'self'
       },
       invoice: {
-        read:    'team',
-        write:   'team' | 'self',
-        approve: 'team' | 'self'
+        read:    'office'| 'team' | 'self',
+        write:   'office'| 'team' | 'self',
+        approve: 'office'| 'team' | 'self'
       },
       ...
     }
     */
-    CONSTRAINT team_roles_office_uk UNIQUE (office_id, team_role_id)
+    CONSTRAINT roles_name_uk UNIQUE (office_id, name),
+    CONSTRAINT roles_office_uk UNIQUE (office_id, role_id)
 );
-SELECT app.setup_office_scoped_table('team_roles');
-CREATE INDEX ON app.team_roles(office_id);
+SELECT app.setup_office_scoped_table('roles');
+CREATE INDEX ON app.roles(office_id);
 
-
--- TEAM_MEMBER_ROLES
-CREATE TABLE app.team_member_roles (
+-- employee_roles
+CREATE TABLE app.employee_roles (
     office_id UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
-    team_id UUID NOT NULL,
-    FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE CASCADE,
     user_id UUID NOT NULL,
     FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE CASCADE,
-    team_role_id UUID NOT NULL,
-    FOREIGN KEY (office_id, team_role_id) REFERENCES app.team_roles(office_id, team_role_id) ON DELETE CASCADE,
-    PRIMARY KEY (office_id, team_id, user_id, team_role_id)
+    role_id UUID NOT NULL,
+    FOREIGN KEY (office_id, role_id) REFERENCES app.roles(office_id, role_id) ON DELETE CASCADE,
+    PRIMARY KEY (office_id, role_id, user_id)
 );
-SELECT app.setup_office_scoped_table('team_member_roles');
-CREATE INDEX ON app.team_member_roles(office_id);
-CREATE INDEX ON app.team_member_roles(office_id, team_id);
-CREATE INDEX ON app.team_member_roles(office_id, user_id);
-CREATE INDEX ON app.team_member_roles(office_id, team_id, team_role_id);
+SELECT app.setup_office_scoped_table('employee_roles');
+CREATE INDEX ON app.employee_roles(office_id);
+CREATE INDEX ON app.employee_roles(office_id, role_id);
+CREATE INDEX ON app.employee_roles(office_id, user_id);
 
 
 -- MATTERS
@@ -602,7 +595,7 @@ CREATE TABLE app._matters (
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id),
     responsible_attorney_id UUID NOT NULL,
     FOREIGN KEY (office_id, responsible_attorney_id) REFERENCES app._employees(office_id, user_id),
-    supervising_attorney_id UUID NOT NULL,
+    supervising_attorney_id UUID,
     FOREIGN KEY (office_id, supervising_attorney_id) REFERENCES app._employees(office_id, user_id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',

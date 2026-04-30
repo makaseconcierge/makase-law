@@ -1,10 +1,11 @@
 import type { default as AuditLogTable } from './AuditLog.js';
 import type { default as EntityRolesTable } from './EntityRoles.js';
 import type { default as EmployeesTable } from './Employees.js';
-import type { default as TeamRolesTable } from './TeamRoles.js';
+import type { default as EmployeeRolesTable } from './EmployeeRoles.js';
+import type { default as EmployeeTeamsTable } from './EmployeeTeams.js';
 import type { default as EntitiesTable } from './Entities.js';
-import type { default as TeamMemberRolesTable } from './TeamMemberRoles.js';
 import type { default as InvoicePaymentsTable } from './InvoicePayments.js';
+import type { default as RolesTable } from './Roles.js';
 import type { default as ExpensesTable } from './Expenses.js';
 import type { default as TimeEntriesTable } from './TimeEntries.js';
 import type { default as InvoicesTable } from './Invoices.js';
@@ -22,13 +23,15 @@ export default interface AppSchema {
 
   _employees: EmployeesTable;
 
-  team_roles: TeamRolesTable;
+  employee_roles: EmployeeRolesTable;
+
+  employee_teams: EmployeeTeamsTable;
 
   entities: EntitiesTable;
 
-  team_member_roles: TeamMemberRolesTable;
-
   invoice_payments: InvoicePaymentsTable;
+
+  roles: RolesTable;
 
   expenses: ExpensesTable;
 

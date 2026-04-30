@@ -2,8 +2,9 @@ import type { Offices, NewOffices } from "./generated/app/Offices.js";
 import type { Employees, NewEmployees } from "./generated/app/Employees.js";
 import type { Matters, NewMatters } from "./generated/app/Matters.js";
 import type { Teams, NewTeams } from "./generated/app/Teams.js";
-import type { TeamRoles, NewTeamRoles } from "./generated/app/TeamRoles.js";
-import type { TeamMemberRoles, NewTeamMemberRoles } from "./generated/app/TeamMemberRoles.js";
+import type { Roles, NewRoles } from "./generated/app/Roles.js";
+import type { EmployeeRoles, NewEmployeeRoles } from "./generated/app/EmployeeRoles.js";
+import type { EmployeeTeams, NewEmployeeTeams } from "./generated/app/EmployeeTeams.js";
 import type { Entities, NewEntities } from "./generated/app/Entities.js";
 import type { EntityRoles, NewEntityRoles } from "./generated/app/EntityRoles.js";
 import type { TimeEntries, NewTimeEntries } from "./generated/app/TimeEntries.js";
@@ -14,7 +15,7 @@ import type { Expenses, NewExpenses } from "./generated/app/Expenses.js";
 import type { InvoicePayments, NewInvoicePayments } from "./generated/app/InvoicePayments.js";
 import type { UserProfiles } from "./generated/app/UserProfiles.js";
 import type { Users } from "./generated/auth/Users.js";
-export * from "./custom/RoleConfig.js";
+export * from "./custom/Permissions.js";
 
 /**
  * Columns owned exclusively by the `set_audit_fields` trigger. Callers
@@ -50,17 +51,17 @@ export type Team = Teams;
 export type NewTeam = Omit<NewTeams, AuditColumns | "office_id">;
 export type TeamPatch = Partial<Omit<Team, AuditColumns | "team_id" | "office_id">>;
 
+export type Role = Roles;
+export type NewRole = Omit<NewRoles, AuditColumns | "office_id">;
+export type RolePatch = Partial<Omit<Role, AuditColumns | "role_id" | "office_id">>;
 
+export type EmployeeRole = EmployeeRoles;
+export type NewEmployeeRole = Omit<NewEmployeeRoles, AuditColumns | "office_id">;
+export type EmployeeRolePatch = Partial<Omit<EmployeeRole, AuditColumns | "employee_role_id" | "office_id">>;
 
-export type TeamRole = TeamRoles;
-export type NewTeamRole = Omit<NewTeamRoles, AuditColumns | "office_id">;
-export type TeamRolePatch = Partial<Omit<NewTeamRole, AuditColumns | "team_role_id">>
-
-
-// Composite-PK link tables: nothing to patch once a row is created — the
-// row itself is the membership. Surface only the readable + insert shapes.
-export type TeamMemberRole = TeamMemberRoles;
-export type NewTeamMemberRole = Omit<NewTeamMemberRoles, AuditColumns | "office_id">;
+export type EmployeeTeam = EmployeeTeams;
+export type NewEmployeeTeam = Omit<NewEmployeeTeams, AuditColumns | "office_id">;
+export type EmployeeTeamPatch = Partial<Omit<EmployeeTeam, AuditColumns | "employee_team_id" | "office_id">>;
 
 export type Entity = Entities;
 export type NewEntity = Omit<NewEntities, AuditColumns | "office_id">;

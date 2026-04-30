@@ -17,7 +17,7 @@ export default interface MattersTable {
 
   responsible_attorney_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
 
-  supervising_attorney_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+  supervising_attorney_id: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 
   title: ColumnType<string, string, string>;
 

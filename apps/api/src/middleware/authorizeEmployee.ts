@@ -1,29 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { loggedInUserService } from "@makase-law/shared";
 import type { AppEnv } from "@/honoEnv";
-import { getLogger } from "@logtape/logtape";
-
-const logger = getLogger(["authorizeEmployeeMiddleware"]);
-
-
-function doublCheckOfficeIds(data: any, office_id: string) {
-  if (Array.isArray(data)) {
-      for (let i = 0; i < data.length; i++) {
-          if (!doublCheckOfficeIds(data[i], office_id)) return false;
-      }
-  } else if (!!data && typeof data === 'object') {
-      if (data.office_id !== undefined && data.office_id !== office_id) {
-          return false;
-      }
-      for (const key in data) {
-        if (key && Object.hasOwn(data, key)) {
-          if (!doublCheckOfficeIds(data[key], office_id)) return false;
-        }
-      }
-  }
-  return true;
-}
-
 
 /**
  * Resolves the request actor's employment in the URL-scoped office,
@@ -38,16 +15,17 @@ function doublCheckOfficeIds(data: any, office_id: string) {
 export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
   const office_id = c.req.param("office_id");
   const authUser = c.get("authUser");
-  if (!authUser || !office_id) {
+  if (!authUser?.user_id || !office_id) {
     return c.json(
       { code: "unauthenticated", message: "You are not logged in" },
       401,
     );
   }
 
-  const [employee, permissions] = await Promise.all([
+  const [employee, permissions, teamIds] = await Promise.all([
     loggedInUserService.getEmploymentAtOffice(office_id),
     loggedInUserService.getPermissionsAtOffice(office_id),
+    loggedInUserService.getTeamIdsAtOffice(office_id),
   ]);
   if (!employee) {
     return c.json(
@@ -58,17 +36,7 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
 
   c.set("employee", employee);
   c.set("permissions", permissions);
+  c.set("teamIds", teamIds);
 
   await next();
-
-  // This is a bit rediculous but good defense-in-depth until we start caring about performance
-  const clonedResp = await c.res.clone().json();
-  const allValidOffices = doublCheckOfficeIds(clonedResp, employee.office_id);
-  if (!allValidOffices) {
-    logger.error("Invalid offices found in response", { response: clonedResp });
-    return c.json(
-      { code: "unauthorized", message: "You do not have access to this office" },
-      403,
-    );
-  }
 });

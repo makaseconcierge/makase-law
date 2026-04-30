@@ -1,7 +1,7 @@
 
 import { getUserContext } from "../../context/loggedInContext";
 import { getLogger } from "@logtape/logtape";
-import { parsePermissions } from "@makase-law/utils";
+import { mergeRolePermissions } from "@makase-law/utils";
 
 let logger = getLogger(["userService"]);
 
@@ -38,6 +38,32 @@ export async function getProfile() {
 }
 
 
+export async function getTeamIdsAtOffice(office_id: string) {
+  const { db, loggedInUserId } = getUserContext();
+  logger.trace("Getting teams for office", { office_id });
+  return db.selectFrom("employee_teams")
+    .select(["team_id"])
+    .where("office_id", "=", office_id)
+    .where("user_id", "=", loggedInUserId)
+    .execute()
+    .then((rows) => rows.map((row) => row.team_id));
+}
+
+export async function getRolesAtOffice(office_id: string) {
+  const { db, loggedInUserId } = getUserContext();
+  logger.trace("Getting roles for office", { office_id });
+  return db.selectFrom("employee_roles as er")
+    .innerJoin("roles as r", (join) =>
+      join
+        .onRef("r.role_id", "=", "er.role_id")
+        .onRef("r.office_id", "=", "er.office_id"),
+    )
+    .select(["r.role_id", "r.name", "r.permissions"])
+    .where("office_id", "=", office_id)
+    .where("user_id", "=", loggedInUserId)
+    .execute();
+}
+
 export async function getEmploymentAtOffice(office_id: string) {
   const { db, loggedInUserId } = getUserContext();
   logger.trace("Getting employee");
@@ -49,19 +75,6 @@ export async function getEmploymentAtOffice(office_id: string) {
 }
 
 export async function getPermissionsAtOffice(office_id: string) {
-  const { db, loggedInUserId } = getUserContext();
-  logger.trace("Getting permissions for office", { office_id });
-  const rows = await db
-    .selectFrom("team_member_roles as tmr")
-    .innerJoin("team_roles as tr", (join) =>
-      join
-        .onRef("tr.team_role_id", "=", "tmr.team_role_id")
-        .onRef("tr.office_id", "=", "tmr.office_id"),
-    )
-    .where("tmr.office_id", "=", office_id)
-    .where("tmr.user_id", "=", loggedInUserId)
-    .select(["tmr.team_id", "tr.role_config"])
-    .execute();
-
-  return parsePermissions(rows);
+  const roles = await getRolesAtOffice(office_id);
+  return mergeRolePermissions(roles);
 }

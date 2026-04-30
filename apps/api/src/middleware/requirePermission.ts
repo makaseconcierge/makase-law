@@ -5,18 +5,17 @@ import { getEmployeeContext } from "@makase-law/shared";
 
 export const requirePermission = (resource: string, action: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
+    const { is_admin } = c.get("employee");
     const permissions = c.get("permissions");
+    const teamIds = c.get("teamIds");
     const employeeContext = getEmployeeContext();
-
-    const fullAccessTeamIds = Array.from(permissions[resource]?.[action]?.fullAccessTeamIds || []);
-    const selfAccessTeamIds = Array.from(permissions[resource]?.[action]?.selfAccessTeamIds || []);
-
-    const hasPermission = fullAccessTeamIds.length > 0 || selfAccessTeamIds.length > 0;
-    if (!hasPermission || !employeeContext) {
+    const scope = is_admin ? "office" : permissions[resource]?.[action];
+    
+    if (!scope) {
       return c.json({ code: "unauthorized", message: "Unauthorized" }, 403);
     }
 
-    employeeContext.fullAccessTeamIds = fullAccessTeamIds;
-    employeeContext.selfAccessTeamIds = selfAccessTeamIds;
+    employeeContext.scope = scope;
+    employeeContext.permitTeamIds = teamIds;
     await next();
   });

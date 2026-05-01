@@ -1,13 +1,13 @@
 -- Local dev seed for Makase Law.
 --
--- Creates one office, two employees, two teams, two roles, a matter with
--- entities, a few tasks, and a lead — enough for the office-web app to
--- load past the office-context provider and render dashboard pages.
+-- Creates two offices. dev@makase.dev has access to both.
+-- Office A (Test Law Firm): dev + jane, two teams, two roles, sample matter/tasks/lead.
+-- Office B (Second Law Firm): dev only, one team, Partner role.
 --
 -- Login: open http://127.0.0.1:54324 (Inbucket) after requesting a magic
 -- link from the office-web login page for one of the seeded emails:
---   dev@makase.dev   (admin, both teams, Partner role)
---   jane@makase.dev      (Litigation team, Associate role)
+--   dev@makase.dev   (admin at both offices; Partner role)
+--   jane@makase.dev  (Litigation team, Associate role — Test Law Firm only)
 
 BEGIN;
 
@@ -205,5 +205,63 @@ INSERT INTO app.leads (
     'collect_contact_info'
 )
 ON CONFLICT (lead_id) DO NOTHING;
+
+-- 4. Second office — SYSTEM bootstraps it, dev authors the structure.
+SET LOCAL app.acting_user_id = '00000000-0000-0000-0000-000000000001';
+
+INSERT INTO app.offices (office_id, slug, name, email, phone, website)
+VALUES (
+    '00000000-0000-0000-0000-00000000bbbb',
+    'second-law-firm',
+    'Second Law Firm',
+    'hello@secondlaw.dev',
+    '555-0200',
+    'https://secondlaw.dev'
+)
+ON CONFLICT (office_id) DO NOTHING;
+
+SET LOCAL app.acting_office_id = '00000000-0000-0000-0000-00000000bbbb';
+
+INSERT INTO app._employees (user_id, office_id, full_legal_name, is_admin, bar_numbers)
+VALUES (
+    '11111111-1111-1111-1111-111111111111',
+    '00000000-0000-0000-0000-00000000bbbb',
+    'Dev User', TRUE,
+    '[{"state":"CA","number":"123456"}]'::jsonb
+)
+ON CONFLICT (office_id, user_id) DO NOTHING;
+
+SET LOCAL app.acting_user_id = '11111111-1111-1111-1111-111111111111';
+
+INSERT INTO app.teams (team_id, office_id, name, description) VALUES
+    ('00000000-0000-0000-0000-000000000ba1',
+     '00000000-0000-0000-0000-00000000bbbb',
+     'General', 'General practice')
+ON CONFLICT (office_id, name) DO NOTHING;
+
+INSERT INTO app.employee_teams (office_id, user_id, team_id) VALUES
+    ('00000000-0000-0000-0000-00000000bbbb',
+     '11111111-1111-1111-1111-111111111111',
+     '00000000-0000-0000-0000-000000000ba1')
+ON CONFLICT (office_id, team_id, user_id) DO NOTHING;
+
+INSERT INTO app.roles (role_id, office_id, name, description, permissions) VALUES
+    ('00000000-0000-0000-0000-000000000bc1',
+     '00000000-0000-0000-0000-00000000bbbb',
+     'Partner', 'Full firm-wide access',
+     '{
+        "matter":  {"read":"office","write":"office","assign":"office","close":"office"},
+        "invoice": {"read":"office","write":"office","approve":"office"},
+        "task":    {"read":"office","write":"office"},
+        "lead":    {"read":"office","write":"office"},
+        "entity":  {"read":"office","write":"office"}
+      }'::jsonb)
+ON CONFLICT (role_id) DO NOTHING;
+
+INSERT INTO app.employee_roles (office_id, user_id, role_id) VALUES
+    ('00000000-0000-0000-0000-00000000bbbb',
+     '11111111-1111-1111-1111-111111111111',
+     '00000000-0000-0000-0000-000000000bc1')
+ON CONFLICT (office_id, role_id, user_id) DO NOTHING;
 
 COMMIT;

@@ -16,8 +16,8 @@ export function useBaseGET(key: string, options: SWRConfiguration = simpleSWROpt
 
 export function useOfficeScopedGET(key: string, options: SWRConfiguration = simpleSWROptions) {
   const selectedOfficeId = useSelectedOfficeId();
-  const api = useApi(`/office/${selectedOfficeId}`);
-  return useSWR(key, api, options).data;
+  const api = useApi();
+  return useSWR(`/office/${selectedOfficeId}${key}`, api, options).data;
 }
 
 export const useGET = useOfficeScopedGET;

@@ -32,6 +32,8 @@ function OfficeSlugWrapper({children}: {children: React.ReactNode}) {
   const user = useUserProfileWithOffices();
   const { office_slug } = useParams();
 
+  console.log('office_slug', office_slug);
+
   if (!office_slug) return <Redirect to={getOfficeRedirectPath(user)} />;
 
   const selectedOfficeId = user?.offices?.find((o) => o.slug === office_slug)?.office_id;
@@ -43,7 +45,7 @@ function OfficeSlugWrapper({children}: {children: React.ReactNode}) {
   };
 
   if (!selectedOfficeId) return <div>404 Not Found</div>;
-
+console.log('selectedOfficeId', selectedOfficeId);
   return (
     <SelectedOfficeIdContext.Provider value={{ selectedOfficeId, selectOfficeId }}>
       {children}

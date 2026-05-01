@@ -7,9 +7,7 @@ const simpleSWROptions: SWRConfiguration = {
   refreshInterval: 0,            // no polling
 }
 
-
-
-export function useBaseGET(key: string, options: SWRConfiguration = simpleSWROptions) {
+export function useBaseGET<T>(key: string, options: SWRConfiguration<T> = simpleSWROptions): T {
   const api = useApi();
   return useSWR(key, api, options).data;
 }

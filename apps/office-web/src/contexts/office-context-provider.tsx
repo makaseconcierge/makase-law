@@ -1,7 +1,7 @@
 import { useUserProfileWithOffices } from "@/contexts/user-context";
 import { OfficeContext } from "@/contexts/office-context";
 import { mergeRolePermissions } from "@makase-law/utils";
-import { useGET } from "@/apis/use-makase-swr";
+import { useGET } from "@/apis/use-simple-get";
 import { SelectedOfficeIdContext } from "./selected-office-id-context";
 import LoadingDashboard from "@/components/dashboard/loading-dashboard";
 import { Redirect, Route, Switch, useParams } from "wouter";

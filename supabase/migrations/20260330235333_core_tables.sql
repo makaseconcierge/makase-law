@@ -599,11 +599,12 @@ CREATE TABLE app._matters (
     FOREIGN KEY (office_id, responsible_attorney_id) REFERENCES app._employees(office_id, user_id),
     supervising_attorney_id UUID,
     FOREIGN KEY (office_id, supervising_attorney_id) REFERENCES app._employees(office_id, user_id),
+    non_team_member_ids UUID[] NOT NULL DEFAULT '{}'::uuid[],
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     stage       TEXT NOT NULL DEFAULT 'consultation',
     type        TEXT NOT NULL DEFAULT 'general',
-    billing_type TEXT NOT NULL DEFAULT 'active',
+    billing_type TEXT NOT NULL,
     billing_settings JSONB NOT NULL DEFAULT '{}'::jsonb, -- need these here because they could change in settings but once contract is signed they are locked in
     started_representation_at    TIMESTAMPTZ,
     ended_representation_at      TIMESTAMPTZ,
@@ -621,8 +622,8 @@ CREATE TABLE app._matters (
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
     CONSTRAINT matters_team_uk UNIQUE (office_id, matter_id, team_id),
     CONSTRAINT matters_billing_type_check CHECK (billing_type IN (
-        'active', 'active_deferred', 'contingency', 'flat_fee', 'flat_fee_plus_hourly'
-    )),
+        'hourly', 'flat_fee', 'flat_fee_plus_hourly'
+    )), -- TODO: lock these down 
     CONSTRAINT matters_stage_check CHECK (stage IN (
         'consultation', 'setup', 'active', 'closed', 'archived'
     )),
@@ -773,8 +774,8 @@ CREATE TABLE app.tasks (
     status      TEXT NOT NULL DEFAULT 'pending',
     due_date    TIMESTAMPTZ,
 
-    billable BOOLEAN NOT NULL DEFAULT FALSE,
-    no_charge BOOLEAN NOT NULL DEFAULT FALSE,
+    billable BOOLEAN NOT NULL,
+    charge_client BOOLEAN NOT NULL,
 
     CONSTRAINT tasks_office_uk UNIQUE (office_id, task_id),
     CONSTRAINT tasks_team_uk UNIQUE (office_id, task_id, team_id),
@@ -882,7 +883,7 @@ CREATE TABLE app.expenses (
     description TEXT,
     is_reimbursable BOOLEAN NOT NULL DEFAULT FALSE,
     billable BOOLEAN NOT NULL DEFAULT TRUE,
-    no_charge BOOLEAN NOT NULL DEFAULT FALSE,
+    charge_client BOOLEAN NOT NULL DEFAULT FALSE,
     receipt_path TEXT[] NOT NULL DEFAULT '{}',
     external_invoice_data JSONB NOT NULL DEFAULT '{}'::jsonb,
 

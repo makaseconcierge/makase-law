@@ -19,6 +19,8 @@ export default interface MattersTable {
 
   supervising_attorney_id: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
 
+  non_team_member_ids: ColumnType<string[], string[] | undefined, string[]>;
+
   title: ColumnType<string, string, string>;
 
   description: ColumnType<string, string | undefined, string>;
@@ -27,7 +29,7 @@ export default interface MattersTable {
 
   type: ColumnType<string, string | undefined, string>;
 
-  billing_type: ColumnType<string, string | undefined, string>;
+  billing_type: ColumnType<string, string, string>;
 
   billing_settings: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 

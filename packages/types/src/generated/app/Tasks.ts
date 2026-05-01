@@ -30,9 +30,9 @@ export default interface TasksTable {
 
   due_date: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  billable: ColumnType<boolean, boolean | undefined, boolean>;
+  billable: ColumnType<boolean, boolean, boolean>;
 
-  no_charge: ColumnType<boolean, boolean | undefined, boolean>;
+  charge_client: ColumnType<boolean, boolean, boolean>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

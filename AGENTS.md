@@ -5,7 +5,7 @@
 - v0 product focus is task management + time tracking (Asana + BigTime replacement); forms are not a core table/feature; matter staffing uses `matter_staff`/`matter_role` (not `matter_attorneys`, since paralegals/EAs can be staffed) but staffing workflows can stay later scope
 - API connects directly to Postgres via Kysely, not via supabase-js
 - Invoice payment allocation modeled as multiple payment rows linked by external_payment_id, not a junction table; `total_amount` is stored and can be overridden via an explicit `adjustment_amount` column, not silently recomputed
-- Time entries without a task_id are non-billable, reporting-only (billable/no_charge flags live on tasks, not time_entries); do not store per-entry billable hours on time_entries — task-level billable totals are derived by summing entries for the task and rounding
+- Time entries without a task_id are non-billable, reporting-only (billable/charge_client flags live on tasks, not time_entries); do not store per-entry billable hours on time_entries — task-level billable totals are derived by summing entries for the task and rounding
 - Multi-tenant product: firm-specific config (e.g. late_fee_rate) must not have defaults — each firm sets its own values
 - Pushes back on premature optimization; prefers query simplicity until scale pain is measured
 - Values concise DX — prefers a single well-considered solution (views, triggers, scopedDb, runAs) over belt-and-suspenders safeguards or app-level wrappers that require type hacks; if a workaround seems necessary, stop and present options/recommendations before coding

@@ -148,7 +148,7 @@ INSERT INTO app._matters (
     '11111111-1111-1111-1111-111111111111',
     'Acme v. Smith',
     'Contract dispute over Q1 deliverables.',
-    'active', 'litigation', 'active',
+    'active', 'litigation', 'hourly',
     NOW() - INTERVAL '14 days'
 )
 ON CONFLICT (matter_id) DO NOTHING;
@@ -166,7 +166,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO app.tasks (
     task_id, office_id, team_id, matter_id, assigned_to,
-    name, description, status, billable, due_date
+    name, description, status, billable, charge_client, due_date
 ) VALUES
     ('00000000-0000-0000-0000-0000000000f1',
      '00000000-0000-0000-0000-00000000aaaa',
@@ -175,21 +175,21 @@ INSERT INTO app.tasks (
      '11111111-1111-1111-1111-111111111111',
      'Draft motion to dismiss',
      'Initial draft due end of week.',
-     'active', TRUE, NOW() + INTERVAL '5 days'),
+     'active', TRUE, TRUE, NOW() + INTERVAL '5 days'),
     ('00000000-0000-0000-0000-0000000000f2',
      '00000000-0000-0000-0000-00000000aaaa',
      '00000000-0000-0000-0000-0000000000b1',
      '00000000-0000-0000-0000-0000000000e1',
      '22222222-2222-2222-2222-222222222222',
      'Review discovery requests',
-     '', 'pending', TRUE, NOW() + INTERVAL '10 days'),
+     '', 'pending', TRUE, TRUE, NOW() + INTERVAL '10 days'),
     ('00000000-0000-0000-0000-0000000000f3',
      '00000000-0000-0000-0000-00000000aaaa',
      '00000000-0000-0000-0000-0000000000b2',
      NULL,
      '11111111-1111-1111-1111-111111111111',
      'Quarterly billing review',
-     'Non-matter admin task.', 'pending', FALSE, NULL)
+     'Non-matter admin task.', 'pending', FALSE, TRUE, NULL)
 ON CONFLICT (task_id) DO NOTHING;
 
 -- Intake lead in the Transactional pipeline.

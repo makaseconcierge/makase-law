@@ -31,7 +31,7 @@ export default interface ExpensesTable {
 
   billable: ColumnType<boolean, boolean | undefined, boolean>;
 
-  no_charge: ColumnType<boolean, boolean | undefined, boolean>;
+  charge_client: ColumnType<boolean, boolean | undefined, boolean>;
 
   receipt_path: ColumnType<string[], string[] | undefined, string[]>;
 

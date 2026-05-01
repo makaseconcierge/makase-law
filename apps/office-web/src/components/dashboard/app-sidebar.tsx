@@ -13,13 +13,10 @@ import { OfficeSwitcher } from "@/components/dashboard/office-switcher"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarRail,
   SidebarGroup,
 } from "@/components/ui/sidebar"
-
-
 
 const sideMenu = [
   {
@@ -43,11 +40,6 @@ const sideMenu = [
     Icon: CreditCardIcon,
     submenu: [
       {
-        name: "double",
-        url: "/billing/doublebilling",
-        Icon: CreditCardIcon,
-      },
-      {
         name: "Invoices",
         url: "/billing/invoices",
         Icon: FileTextIcon,
@@ -56,15 +48,7 @@ const sideMenu = [
   },
 ]
 
-// const adminMenu = [{
-//   name: 'Admin Settings',
-//   Icon: Settings,
-//   url: '/vendor-admin-settings'
-// }];
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-
-
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -75,11 +59,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SideMenu menuItems={sideMenu} />
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        {/* {isAdmin && <SideMenu menuItems={adminMenu} />} */}
-      </SidebarFooter>
       <SidebarRail />
-        <NavUser />
+      <NavUser />
     </Sidebar>
   )
 }

@@ -29,7 +29,7 @@ function UserContextProvider({ children }: { children: React.ReactNode }) {
 }
 
 export default function AuthContextProvider({ children }: { children: React.ReactNode }) {
-  const [loadingCreds, setLodingCreds] = useState(true);
+  const [loadingCreds, setLoadingCreds] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function AuthContextProvider({ children }: { children: React.Reac
         localStorage.removeItem("makase.com:loggedInHref");
         window.location.href = href;
       }
-    }).finally(() => setLodingCreds(false));
+    }).finally(() => setLoadingCreds(false));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => {
       subscription.unsubscribe();

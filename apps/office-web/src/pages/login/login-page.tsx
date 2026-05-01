@@ -67,7 +67,6 @@ export default function LoginPage() {
                       token: otp
                     }).then(({ error }) => {
                       if (error) {
-                        console.log(error);
                         toast.error("The code you entered is incorrect or expired.", {
                           description: 'Please wait a bit and try again.'
                         });

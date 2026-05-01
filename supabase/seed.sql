@@ -42,9 +42,10 @@ ON CONFLICT (id) DO NOTHING;
 --    it to SYSTEM so audit attribution matches the runAsSystem path.
 SET LOCAL app.acting_user_id = '00000000-0000-0000-0000-000000000001';
 
-INSERT INTO app.offices (office_id, name, email, phone, website)
+INSERT INTO app.offices (office_id, slug, name, email, phone, website)
 VALUES (
     '00000000-0000-0000-0000-00000000aaaa',
+    'test-law-firm',
     'Test Law Firm',
     'hello@testlaw.dev',
     '555-0100',

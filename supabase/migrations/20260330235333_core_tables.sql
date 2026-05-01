@@ -426,6 +426,7 @@ EXECUTE FUNCTION app.handle_auth_user_updated();
 -- OFFICES
 CREATE TABLE app.offices (
     office_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug        TEXT NOT NULL UNIQUE,
     name        TEXT NOT NULL,
     address     JSONB,
     phone       TEXT,
@@ -433,6 +434,7 @@ CREATE TABLE app.offices (
     website     TEXT,
     logo        TEXT
 );
+CREATE INDEX ON app.offices(slug);
 
 
 -- AUDIT LOG

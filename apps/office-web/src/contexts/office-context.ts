@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { Office, Permissions, Role, Team } from "@makase-law/types";
-import { useUserProfileWithOffices } from "./user-context";
+import { useUserProfileWithOffices, type UserProfileWithOffices } from "./user-context";
 
 export function useOffices() {
   const user = useUserProfileWithOffices();
@@ -25,3 +25,11 @@ export function useOffice() {
   }
   return context;
 }
+
+
+
+export const LAST_SELECTED_OFFICE_KEY = "makase.com:selectedOfficeId";
+
+export const getOfficeRedirectPath = (user: UserProfileWithOffices) => {
+  return `/o/${user?.offices?.[0]?.slug}`;
+};

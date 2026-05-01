@@ -24,7 +24,7 @@ bun run lint        # eslint .
 ## Stack
 
 - **Routing** — [`wouter`](https://github.com/molefrog/wouter), declared in [`src/components/dashboard/routes.tsx`](src/components/dashboard/routes.tsx).
-- **Data fetching** — [`swr`](https://swr.vercel.app/), wrapped in [`src/apis/use-simple-swr.ts`](src/apis/use-simple-swr.ts) which composes with the auth-aware `useApi` / `useOfficeApi` from [`src/apis/use-api.ts`](src/apis/use-api.ts).
+- **Data fetching** — [`swr`](https://swr.vercel.app/), wrapped in [`src/apis/use-simple-swr.ts`](src/apis/use-simple-swr.ts) which composes with the auth-aware `useApi` from [`src/apis/use-api.ts`](src/apis/use-api.ts).
 - **Auth** — Supabase JS, see [`src/apis/supabase.ts`](src/apis/supabase.ts) and [`src/contexts/auth-context-provider.tsx`](src/contexts/auth-context-provider.tsx).
 - **UI** — shadcn-style primitives (in [`src/components/ui/`](src/components/ui/)) on top of [`@base-ui/react`](https://base-ui.com/) — **not Radix**. Use Base UI's `render` prop instead of Radix's `asChild`. CSS anchor vars are `--anchor-width` / `--available-height`, not `--radix-*`.
 - **Styling** — Tailwind v4 via `@tailwindcss/vite`, theme variables in [`src/index.css`](src/index.css), light/dark theme handled by [`src/components/theme-provider.tsx`](src/components/theme-provider.tsx) (press `D` to toggle when not in a text field).
@@ -39,8 +39,8 @@ src/
   App.tsx                   AuthContextProvider → OfficeContextProvider → Dashboard, plus Toaster
   apis/
     supabase.ts             Supabase JS client (auth only)
-    use-api.ts              useApi(basePath) + useOfficeApi() — adds Bearer JWT, prepends VITE_API_URL
-    use-simple-swr.ts       useSimpleSWR / useSimpleOfficeSWR — SWR + useApi
+    use-api.ts              useApi(basePath) — adds Bearer JWT, prepends VITE_API_URL, 
+    use-simple-swr.ts       useGET — SWR + useApi
   contexts/
     auth-context-provider.tsx     Owns Supabase session; renders LoginPage when signed out;
                                   fetches /my/profile + /my/offices and provides UserContext
@@ -90,12 +90,14 @@ Any required-data fetch returning `undefined` causes the wrapper to render `<Loa
 
 ## API calls
 
-Use `useOfficeApi()` for office-scoped endpoints — it auto-prefixes `/office/{selectedOfficeId}` and attaches the Supabase JWT:
+Pretty much all api calls should use swr. useSimpleSwr is a convenience hook for simple get endpoints. Resources involving any sort of mutation should define there own using swr + useApi. 
 
 ```tsx
-const api = useOfficeApi()
+const api = useApi()
 const { data } = useSWR("/matters", api)
 ```
+Use `useApi()` under the hood for json api endpoints — it auto-attaches the Supabase JWT and parses json response:
+
 
 Or `useSimpleOfficeSWR("/matters")` which composes the two and integrates with the loading-dashboard pattern.
 

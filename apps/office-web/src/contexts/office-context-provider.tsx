@@ -1,18 +1,18 @@
-import { useState } from "react";
 import { useUserProfileWithOffices } from "@/contexts/user-context";
 import { OfficeContext } from "@/contexts/office-context";
 import { mergeRolePermissions } from "@makase-law/utils";
-import { useSimpleOfficeSWR } from "@/apis/use-simple-swr";
+import { useGET } from "@/apis/use-simple-swr";
 import { SelectedOfficeIdContext } from "./selected-office-id-context";
 import LoadingDashboard from "@/components/dashboard/loading-dashboard";
-
-const SELECTED_OFFICE_KEY = "makase.com:selectedOfficeId";
+import { Redirect, Route, Switch, useParams } from "wouter";
+import { navigate } from "wouter/use-browser-location";
+import { LAST_SELECTED_OFFICE_KEY, getOfficeRedirectPath } from "./office-context";
 
 function OfficeContextFetcher({ children }: { children: React.ReactNode }) {
-  const officeInfo = useSimpleOfficeSWR("/info");
-  const teams = useSimpleOfficeSWR("/my/teams");
-  const roles = useSimpleOfficeSWR("/my/roles");
-  const employment = useSimpleOfficeSWR("/my/employment");
+  const officeInfo = useGET(`/info`);
+  const teams = useGET(`/my/teams`);
+  const roles = useGET(`/my/roles`);
+  const employment = useGET(`/my/employment`);
 
   if (!officeInfo || !teams || !roles || !employment) return <LoadingDashboard />;
 
@@ -27,25 +27,43 @@ function OfficeContextFetcher({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function OfficeContextProvider({ children }: { children: React.ReactNode }) {
+
+function OfficeSlugWrapper({children}: {children: React.ReactNode}) {
   const user = useUserProfileWithOffices();
+  const { office_slug } = useParams();
 
-  const [selectedOfficeId, setSelectedOfficeId] = useState<string | undefined>(() => {
-    const stored = localStorage.getItem(SELECTED_OFFICE_KEY) ?? undefined;
-    if (stored && user?.offices?.some((o) => o.office_id === stored)) return stored;
-    return user?.offices?.[0]?.office_id;
-  });
+  if (!office_slug) return <Redirect to={getOfficeRedirectPath(user)} />;
 
+  const selectedOfficeId = user?.offices?.find((o) => o.slug === office_slug)?.office_id;
   const selectOfficeId = (office_id: string) => {
-    localStorage.setItem(SELECTED_OFFICE_KEY, office_id);
-    setSelectedOfficeId(office_id);
+    localStorage.setItem(LAST_SELECTED_OFFICE_KEY, office_id);
+    const officeSlug = user?.offices?.find((o) => o.office_id === office_id)?.slug;
+    if (officeSlug) navigate(`/o/${officeSlug}`);
+    else throw new Error(`Office ${office_id} not found for this user: ${JSON.stringify(user || {})}`);
   };
 
-  if (!selectedOfficeId) return <LoadingDashboard />;
+  if (!selectedOfficeId) return <div>404 Not Found</div>;
 
   return (
     <SelectedOfficeIdContext.Provider value={{ selectedOfficeId, selectOfficeId }}>
-      <OfficeContextFetcher>{children}</OfficeContextFetcher>
+      {children}
     </SelectedOfficeIdContext.Provider>
+  );
+}
+
+export default function OfficeContextProvider({ children }: { children: React.ReactNode }) {
+  const user = useUserProfileWithOffices();
+  if (!user) return <LoadingDashboard />;
+  if (user.offices.length === 0) return <div>No offices found</div>;
+
+  return (
+    <Switch>
+      <Route path="/:office_slug">
+        <OfficeSlugWrapper>
+          <OfficeContextFetcher>{children}</OfficeContextFetcher>
+        </OfficeSlugWrapper>
+      </Route>
+      <Route path="/" component={() => <Redirect to={getOfficeRedirectPath(user)} />} />
+    </Switch>
   );
 }

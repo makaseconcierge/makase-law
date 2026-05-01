@@ -23,6 +23,7 @@ export async function listOffices() {
       "employees.is_admin",
       "offices.name",
       "offices.logo",
+      "offices.slug"
     ])
     .execute();
 }

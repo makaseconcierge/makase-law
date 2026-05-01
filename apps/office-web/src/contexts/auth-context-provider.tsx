@@ -4,7 +4,7 @@ import supabase from "@/apis/supabase";
 import type { Session } from "@supabase/supabase-js";
 import LoadingDashboard from "@/components/dashboard/loading-dashboard";
 import LoginPage from "@/pages/login/login-page";
-import { useSimpleSWR } from "@/apis/use-simple-swr";
+import { useBaseGET } from "@/apis/use-simple-swr";
 import { AccessTokenContext } from "./access-token-context";
 import type { SWRConfiguration } from "swr";
 
@@ -16,8 +16,8 @@ const staticSWROptions: SWRConfiguration = {
 }
 
 function UserContextProvider({ children }: { children: React.ReactNode }) {
-  const userProfile = useSimpleSWR("/my/profile", staticSWROptions);
-  const offices = useSimpleSWR("/my/offices", staticSWROptions);
+  const userProfile = useBaseGET("/my/profile", staticSWROptions);
+  const offices = useBaseGET("/my/offices", staticSWROptions);
 
   if (!userProfile || !offices) return <LoadingDashboard />;
 

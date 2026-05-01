@@ -9,6 +9,8 @@ export type OfficesOfficeId = string;
 export default interface OfficesTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId | undefined, OfficesOfficeId>;
 
+  slug: ColumnType<string, string, string>;
+
   name: ColumnType<string, string, string>;
 
   address: ColumnType<JsonValue | null, JsonValue | null, JsonValue | null>;

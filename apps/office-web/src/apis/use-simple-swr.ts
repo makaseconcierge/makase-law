@@ -1,5 +1,6 @@
 import useSWR, { type SWRConfiguration } from "swr";
-import { useApi, useOfficeApi } from "./use-api";
+import { useApi } from "./use-api";
+import { useSelectedOfficeId } from "@/contexts/selected-office-id-context";
 
 const simpleSWROptions: SWRConfiguration = {
   revalidateOnFocus: false,      // don't refetch when tab regains focus
@@ -8,12 +9,15 @@ const simpleSWROptions: SWRConfiguration = {
 
 
 
-export function useSimpleSWR(key: string, options: SWRConfiguration = simpleSWROptions) {
+export function useBaseGET(key: string, options: SWRConfiguration = simpleSWROptions) {
   const api = useApi();
   return useSWR(key, api, options).data;
 }
 
-export function useSimpleOfficeSWR(key: string, options: SWRConfiguration = simpleSWROptions) {
-  const api = useOfficeApi();
+export function useOfficeScopedGET(key: string, options: SWRConfiguration = simpleSWROptions) {
+  const selectedOfficeId = useSelectedOfficeId();
+  const api = useApi(`/office/${selectedOfficeId}`);
   return useSWR(key, api, options).data;
 }
+
+export const useGET = useOfficeScopedGET;

@@ -30,9 +30,9 @@ export function SideMenu({
     <SidebarMenu>
       {menuItems.map((item, index) => (
         <SidebarMenuItem key={index} >
-          <SidebarMenuButton size={isSubmenu ? 'xs' : 'default'} asChild className={cn(location === item.url && "text-primary bg-accent font-semibold", "hover:text-primary active:text-primary", isSubmenu && "rounded-l-none h-5 text-xs")}>
-            <Link href={item.url}>
-              <item.Icon className="w-4 h-4" />
+          <SidebarMenuButton className={cn("hover:text-primary active:text-primary", location === item.url && "text-secondary bg-accent font-semibold hover:text-secondary hover:bg-accent/90", isSubmenu && "rounded-l-none h-5 text-xs")}>
+            <Link href={item.url} className="flex items-center gap-2">
+              <item.Icon className="w-4 h-4"/>
               <span className="group-data-[collapsible=icon]:hidden">{item.name}</span>
             </Link>
           </SidebarMenuButton>

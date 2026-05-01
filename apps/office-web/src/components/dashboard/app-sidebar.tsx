@@ -4,11 +4,12 @@ import {
   ListTodoIcon,
   User2Icon,
   CreditCardIcon,
+  FileTextIcon,
 } from "lucide-react"
 
 import { SideMenu } from "@/components/dashboard/side-menu"
 import { NavUser } from "@/components/dashboard/nav-user"
-import { VendorSwitcher } from "@/components/dashboard/vendor-switcher"
+import { OfficeSwitcher } from "@/components/dashboard/office-switcher"
 import {
   Sidebar,
   SidebarContent,
@@ -40,6 +41,18 @@ const sideMenu = [
     name: "Billing",
     url: "/billing",
     Icon: CreditCardIcon,
+    submenu: [
+      {
+        name: "double",
+        url: "/billing/doublebilling",
+        Icon: CreditCardIcon,
+      },
+      {
+        name: "Invoices",
+        url: "/billing/invoices",
+        Icon: FileTextIcon,
+      },
+    ],
   },
 ]
 
@@ -55,7 +68,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <NavUser />
+        <OfficeSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -64,9 +77,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         {/* {isAdmin && <SideMenu menuItems={adminMenu} />} */}
-        <VendorSwitcher />
       </SidebarFooter>
       <SidebarRail />
+        <NavUser />
     </Sidebar>
   )
 }

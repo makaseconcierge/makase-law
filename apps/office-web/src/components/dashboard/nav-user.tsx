@@ -1,5 +1,3 @@
-"use client"
-
 import {
   BadgeCheck,
   ChevronsUpDown,
@@ -10,7 +8,6 @@ import {
 import {
   Avatar,
   AvatarFallback,
-  AvatarImage,
 } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -27,37 +24,34 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import UserContext from "@/contexts/userContext"
-import { useContext } from "react"
-import makaseSupabase from "@/apis/makaseSupabase"
-import { Skeleton } from "../ui/skeleton"
+import { useUserProfileWithOffices } from "@/contexts/user-context"
+import supabase from "@/apis/supabase"
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const user = useContext(UserContext)
-
-  if (!user) return <Skeleton className="rounded-lg" />
+  const user = useUserProfileWithOffices()
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.user_metadata?.name} />
-                <AvatarFallback className="rounded-lg"><UserIcon className="size-4" /></AvatarFallback>
-              </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{user?.user_metadata?.name}</span>
-                <span className="truncate text-xs">{user?.email}</span>
-              </div>
-              <ChevronsUpDown className="ml-auto size-4" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton
+                size="lg"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              >
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarFallback className="rounded-lg"><UserIcon className="size-4" /></AvatarFallback>
+                </Avatar>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{user.display_name}</span>
+                  <span className="truncate text-xs">{user.email}</span>
+                </div>
+                <ChevronsUpDown className="ml-auto size-4" />
+              </SidebarMenuButton>
+            }
+          />
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
@@ -67,28 +61,23 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.user_metadata?.name} />
-                  <AvatarFallback className="rounded-lg">{user?.user_metadata?.name?.charAt(0) || user?.email?.charAt(0)}</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">{user.display_name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user?.user_metadata?.name}</span>
-                  <span className="truncate text-xs">{user?.email}</span>
+                  <span className="truncate font-semibold">{user.display_name}</span>
+                  <span className="truncate text-xs">{user.email}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => window.open("https://billing.makase.com/p/login/6oEcQh6Bs2H5eru4gg", "_blank")}>
+              <DropdownMenuItem>
                 <BadgeCheck />
-                Account / Billing
+                Account
               </DropdownMenuItem>
-              {/* <DropdownMenuItem>
-                <Bell />
-                Notifications
-              </DropdownMenuItem> */}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => makaseSupabase.auth.signOut()}>
+            <DropdownMenuItem onClick={() => supabase.auth.signOut()}>
               <LogOut />
               Log out
             </DropdownMenuItem>

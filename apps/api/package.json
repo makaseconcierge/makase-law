@@ -1,7 +1,10 @@
 {
-  "name": "makase-law-api",
+  "name": "@makase-law/api",
   "module": "main.ts",
   "type": "module",
+  "exports": {
+    ".": "./types.ts"
+  },
   "scripts": {
     "start": "bun run main.ts",
     "dev": "bun --hot run main.ts",
@@ -12,11 +15,10 @@
     "@logtape/logtape": "^2.0.5",
     "@makase-law/shared": "workspace:*",
     "@makase-law/utils": "workspace:*",
-    "@supabase/supabase-js": "^2.49.1",
-    "hono": "^4.12.8",
+    "hono": "catalog:",
     "jose": "^6.2.2",
     "kysely": "^0.28.15",
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@makase-law/types": "workspace:*",

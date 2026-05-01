@@ -7,12 +7,12 @@
   ],
   "catalog": {
     "@logtape/logtape": "^2.0.5",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "hono": "^4.12.16"
   },
   "scripts": {
     "dev:api": "bun run --cwd apps/api dev",
-    "dev:client": "bun run --cwd apps/client-portal-web-app dev",
-    "dev:office": "bun run --cwd apps/law-office-web-app dev",
+    "dev:office": "bun run --cwd apps/office-web dev",
     "db:types": "bun run --cwd packages/types db:types",
     "db:reset": "supabase db reset && psql \"postgresql://postgres:postgres@localhost:54322/postgres\" -f supabase/local_setup.sql && bun run db:types"
   },

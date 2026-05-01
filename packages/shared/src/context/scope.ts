@@ -31,7 +31,7 @@ export function getScope(resource: string, action: string): Scope {
 }
 
 
-type TeamSelfTables = "matters" | "employee_teams" | "tasks" | "time_entries" | "invoices" | "expenses";
+type TeamSelfTables = "matters" | "employee_teams" | "tasks" | "time_entries" | "invoices" | "expenses" | "teams" | "employee_teams";
 export const buildScopeFilter = <T extends TeamSelfTables> (
   resource: string,
   action: string,

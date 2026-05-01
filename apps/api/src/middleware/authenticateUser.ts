@@ -1,7 +1,13 @@
 import type { AppEnv } from "@/honoEnv";
 import { createMiddleware } from "hono/factory";
-import { jwtVerify } from "jose";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { runAsUser } from "@makase-law/shared";
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+if (!SUPABASE_URL) {
+  throw new Error("SUPABASE_URL is not set — required to verify Supabase auth JWTs against /auth/v1/.well-known/jwks.json");
+}
+const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
 
 /**
  * Verifies the Supabase JWT, sets `user_id` on the request, and opens
@@ -20,13 +26,14 @@ export const authenticateUser = createMiddleware<AppEnv>(async (c, next) => {
   const token = header.slice(7);
   let user_id: string;
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET));
+    const { payload } = await jwtVerify(token, JWKS);
     if (typeof payload.sub !== "string") {
       return c.json({ error: "unauthenticated", message: "Please Login Again" }, 401);
     }
     user_id = payload.sub;
     c.set("user_id", user_id);
   } catch (e) {
+    console.error("[authenticateUser] JWT verification failed:", e);
     return c.json({ error: "unauthenticated", message: "Please Login Again" }, 401);
   }
   await runAsUser(user_id, () => next());

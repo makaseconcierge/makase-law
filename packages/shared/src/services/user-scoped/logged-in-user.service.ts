@@ -59,8 +59,8 @@ export async function getRolesAtOffice(office_id: string) {
         .onRef("r.office_id", "=", "er.office_id"),
     )
     .select(["r.role_id", "r.name", "r.permissions"])
-    .where("office_id", "=", office_id)
-    .where("user_id", "=", loggedInUserId)
+    .where("er.office_id", "=", office_id)
+    .where("er.user_id", "=", loggedInUserId)
     .execute();
 }
 

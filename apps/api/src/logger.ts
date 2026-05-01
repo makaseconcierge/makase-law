@@ -10,7 +10,7 @@ await configure({
   },
   loggers: [
     {
-      category: "api",
+      category: [],
       lowestLevel: Bun.env.LOG_LEVEL as any || "info",
       sinks: ["console"],
     },

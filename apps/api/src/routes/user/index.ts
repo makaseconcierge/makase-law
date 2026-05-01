@@ -12,4 +12,6 @@ const routes = new Hono<AppEnv>()
     return c.json(offices);
   })
 
+export type UserApi = typeof routes;
+
 export default routes;

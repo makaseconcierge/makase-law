@@ -35,65 +35,71 @@ type AuditColumns =
   | "deleted_at"
   | "deleted_by";
 
-export type Office = Offices;
+type DatesToStrings<T> = {
+  [K in keyof T]: T[K] extends Date 
+    ? Date | string 
+    : T[K]
+};
+
+export type Office = DatesToStrings<Offices>;
 export type NewOffice = Omit<NewOffices, AuditColumns>;
 export type OfficePatch = Partial<Omit<Office, AuditColumns | "office_id">>;
 
-export type Employee = Employees;
+export type Employee = DatesToStrings<Employees>;
 export type NewEmployee = Omit<NewEmployees, AuditColumns>;
 export type EmployeePatch = Partial<Omit<Employee, AuditColumns | "user_id" | "office_id">>;
 
-export type Matter = Matters;
+export type Matter = DatesToStrings<Matters>;
 export type NewMatter = Omit<NewMatters, AuditColumns | "office_id">;
 export type MatterPatch = Partial<Omit<Matter, AuditColumns | "matter_id" | "office_id">>;
 
-export type Team = Teams;
+export type Team = DatesToStrings<Teams>;
 export type NewTeam = Omit<NewTeams, AuditColumns | "office_id">;
 export type TeamPatch = Partial<Omit<Team, AuditColumns | "team_id" | "office_id">>;
 
-export type Role = Roles;
+export type Role = DatesToStrings<Roles>;
 export type NewRole = Omit<NewRoles, AuditColumns | "office_id">;
 export type RolePatch = Partial<Omit<Role, AuditColumns | "role_id" | "office_id">>;
 
-export type EmployeeRole = EmployeeRoles;
+export type EmployeeRole = DatesToStrings<EmployeeRoles>;
 export type NewEmployeeRole = Omit<NewEmployeeRoles, AuditColumns | "office_id">;
 export type EmployeeRolePatch = Partial<Omit<EmployeeRole, AuditColumns | "employee_role_id" | "office_id">>;
 
-export type EmployeeTeam = EmployeeTeams;
+export type EmployeeTeam = DatesToStrings<EmployeeTeams>;
 export type NewEmployeeTeam = Omit<NewEmployeeTeams, AuditColumns | "office_id">;
 export type EmployeeTeamPatch = Partial<Omit<EmployeeTeam, AuditColumns | "employee_team_id" | "office_id">>;
 
-export type Entity = Entities;
+export type Entity = DatesToStrings<Entities>;
 export type NewEntity = Omit<NewEntities, AuditColumns | "office_id">;
 export type EntityPatch = Partial<Omit<Entity, AuditColumns | "entity_id" | "office_id">>;
 
-export type EntityRoleLink = EntityRoles;
+export type EntityRoleLink = DatesToStrings<EntityRoles>;
 export type NewEntityRoleLink = Omit<NewEntityRoles, AuditColumns | "office_id">;
 
-export type TimeEntry = TimeEntries;
+export type TimeEntry = DatesToStrings<TimeEntries>;
 export type NewTimeEntry = Omit<NewTimeEntries, AuditColumns | "office_id">;
 export type TimeEntryPatch = Partial<Omit<TimeEntry, AuditColumns | "time_entry_id" | "office_id">>;
 
-export type Lead = Leads;
+export type Lead = DatesToStrings<Leads>;
 export type NewLead = Omit<NewLeads, AuditColumns | "office_id">;
 export type LeadPatch = Partial<Omit<Lead, AuditColumns | "lead_id" | "office_id">>;
 
-export type Task = Tasks;
+export type Task = DatesToStrings<Tasks>;
 export type NewTask = Omit<NewTasks, AuditColumns | "office_id">;
 export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id">>;
 
-export type Invoice = Invoices;
+export type Invoice = DatesToStrings<Invoices>;
 export type NewInvoice = Omit<NewInvoices, AuditColumns | "office_id">;
 export type InvoicePatch = Partial<Omit<Invoice, AuditColumns | "invoice_id" | "office_id">>;
 
-export type Expense = Expenses;
+export type Expense = DatesToStrings<Expenses>;
 export type NewExpense = Omit<NewExpenses, AuditColumns | "office_id">;
 export type ExpensePatch = Partial<Omit<Expense, AuditColumns | "expense_id" | "office_id">>;
 
-export type InvoicePayment = InvoicePayments;
+export type InvoicePayment = DatesToStrings<InvoicePayments>;
 export type NewInvoicePayment = Omit<NewInvoicePayments, AuditColumns | "office_id">;
 export type InvoicePaymentPatch = Partial<Omit<InvoicePayment, AuditColumns | "invoice_payment_id" | "office_id">>;
 
-export type UserProfile = UserProfiles;
+export type UserProfile = DatesToStrings<UserProfiles>;
 
 export type AuthUser = Users;

@@ -31,5 +31,7 @@ export function useOffice() {
 export const LAST_SELECTED_OFFICE_KEY = "makase.com:selectedOfficeId";
 
 export const getOfficeRedirectPath = (user: UserProfileWithOffices) => {
-  return `/o/${user?.offices?.[0]?.slug}`;
+  const lastId = localStorage.getItem(LAST_SELECTED_OFFICE_KEY);
+  const office = (lastId && user?.offices?.find(o => o.office_id === lastId)) || user?.offices?.[0];
+  return `/o/${office?.slug}`;
 };

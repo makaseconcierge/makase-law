@@ -30,14 +30,20 @@ export function SideMenu({
     <SidebarMenu>
       {menuItems.map((item, index) => (
         <SidebarMenuItem key={index} >
-          <SidebarMenuButton className={cn("hover:text-primary active:text-primary", location === item.url && "text-secondary bg-accent font-semibold hover:text-secondary hover:bg-accent/90", isSubmenu && "rounded-l-none h-5 text-xs")}>
-            <Link href={item.url} className="flex items-center gap-2">
-              <item.Icon className="w-4 h-4"/>
-              <span className="group-data-[collapsible=icon]:hidden">{item.name}</span>
-            </Link>
-          </SidebarMenuButton>
+          <Link href={item.url} className="flex items-center gap-2 py-1">
+            <SidebarMenuButton size={isSubmenu ? "sm" : "default"} className={
+              cn("hover:text-primary active:text-primary",
+              location === item.url ?
+                "text-secondary bg-accent font-semibold hover:text-secondary hover:bg-accent/90"
+                : location.includes(item.url) && "border-l-2 border-t-1 rounded-r-none rounded-b-none ml-2 border-accent/10 font-bold ",
+              isSubmenu && "rounded-l-none h-5 text-xs")
+            }>
+                <item.Icon className={cn("w-2 h-4", isSubmenu && "ml-[-5px]")}/>
+                <span className="group-data-[collapsible=icon]:hidden">{item.name}</span>
+            </SidebarMenuButton>
+          </Link>
           {item.submenu && location?.includes(item.url) && (
-            <div className="ml-2 border-l-2 group-data-[collapsible=icon]:ml-1">
+            <div className="ml-2 border-l-2 pt-[3px] mt-[-4px] group-data-[collapsible=icon]:ml-1">
               <SideMenu menuItems={item.submenu} isSubmenu={true} />
             </div>
           )}

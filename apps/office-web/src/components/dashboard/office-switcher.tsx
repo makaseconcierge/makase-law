@@ -31,7 +31,7 @@ export function OfficeSwitcher() {
             render={
               <SidebarMenuButton
                 size="lg"
-                className="data-[state=expanded]:bg-sidebar-accent data-[state=expanded]:text-sidebar-accent-foreground bg-sidebar-accent/70"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground bg-sidebar-accent/70"
               >
                 <div className="grid flex-1 justify-start group-data-[state=collapsed]:justify-center text-sm leading-tight">
                   <span className="truncate font-semibold">

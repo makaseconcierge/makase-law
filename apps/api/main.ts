@@ -1,10 +1,10 @@
-import "./src/logger";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import officeRoutes from "./src/routes/office";
 import { authenticateUser } from "./src/middleware/authenticateUser";
 import userRoutes from "./src/routes/user";
 import type { AppEnv } from "./src/honoEnv";
+import { loggerMiddleware } from "./src/logger";
 
 const app = new Hono<AppEnv>();
 
@@ -26,6 +26,7 @@ app.use(
 );
 
 app.use(authenticateUser)
+  .use(loggerMiddleware)
   .route("/office/:office_id", officeRoutes)
   .route("/my", userRoutes);
 

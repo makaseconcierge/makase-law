@@ -15,6 +15,8 @@ export default interface EmployeesTable {
 
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
 
+  is_system: ColumnType<boolean, boolean | undefined, boolean>;
+
   deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   deleted_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;

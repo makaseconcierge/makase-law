@@ -28,6 +28,10 @@ export default interface TasksTable {
 
   status: ColumnType<string, string | undefined, string>;
 
+  ready_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  completed_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
   due_date: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
   billable: ColumnType<boolean, boolean, boolean>;

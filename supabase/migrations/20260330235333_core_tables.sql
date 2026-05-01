@@ -476,6 +476,7 @@ CREATE TABLE app._employees (
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
     is_admin            BOOLEAN NOT NULL DEFAULT FALSE,
+    is_system           BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (office_id, user_id)
 );
 SELECT app.setup_soft_delete('_employees'); -- used to deactivate employees from a firm, but they are still in the system for historical purposes and to keep tasks that were assigned to them before they were deactivated etc.
@@ -772,6 +773,8 @@ CREATE TABLE app.tasks (
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status      TEXT NOT NULL DEFAULT 'pending',
+    ready_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
     due_date    TIMESTAMPTZ,
 
     billable BOOLEAN NOT NULL,
@@ -821,7 +824,7 @@ CREATE TABLE app.invoices (
     CONSTRAINT invoices_total_amount_check CHECK (total_amount >= 0),
     CONSTRAINT invoices_office_uk UNIQUE (office_id, invoice_id),
     CONSTRAINT invoices_status_check CHECK (status IN (
-        'new', 'approved', 'sent', 'paid', 'closed'
+        'draft', 'approved', 'sent', 'paid', 'closed'
     ))
 );
 SELECT app.setup_office_scoped_table('invoices');
@@ -967,3 +970,5 @@ INSERT INTO auth.users (
     NOW(),
     'infinity'
 );
+-- This system user will need to be added as employee to all offices.
+

@@ -1,4 +1,7 @@
-import { configure, getConsoleSink, getJsonLinesFormatter, getAnsiColorFormatter } from "@logtape/logtape";
+import { configure, getConsoleSink, getJsonLinesFormatter, getAnsiColorFormatter, getLogger, withCategoryPrefix } from "@logtape/logtape";
+import { createMiddleware } from "hono/factory";
+import type { AppEnv } from "./honoEnv";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 await configure({
   sinks: {
@@ -15,4 +18,12 @@ await configure({
       sinks: ["console"],
     },
   ],
+  contextLocalStorage: new AsyncLocalStorage()
+});
+
+
+export const loggerMiddleware = createMiddleware<AppEnv>(async (c, next) => {
+  await withCategoryPrefix("api", async() => {
+    await next();
+  });
 });

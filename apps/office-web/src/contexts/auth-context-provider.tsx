@@ -4,7 +4,7 @@ import supabase from "@/apis/supabase";
 import type { Session } from "@supabase/supabase-js";
 import LoadingDashboard from "@/components/dashboard/loading-dashboard";
 import LoginPage from "@/pages/login/login-page";
-import { useBaseGET } from "@/apis/use-simple-swr";
+import { useBaseGET } from "@/apis/use-makase-swr";
 import { AccessTokenContext } from "./access-token-context";
 import type { SWRConfiguration } from "swr";
 

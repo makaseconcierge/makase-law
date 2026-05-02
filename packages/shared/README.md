@@ -21,7 +21,7 @@ From the root entry:
 | `SYSTEM_USER_ID` | `context/run-as.ts` | `"00000000-0000-0000-0000-000000000001"` — seeded in the core migration. |
 | `getUserContext()` / `getEmployeeContext()` | `context/logged-in-context.ts` | Read the active context inside services. Throw if not inside the matching `runAs*` scope. |
 | `getScope(resource, action)` | `context/scope.ts` | Resolves caller's scope (`"office"` / `"team"` / `"self"`) from the merged permissions; throws 403-shaped error on miss. |
-| `buildMatterBasedScopeFilter(resource, action, assignmentColumns)` | `context/scope.ts` | Kysely filter for matter-bearing tables (`matters`, `tasks`, `time_entries`, `invoices`, `expenses`). Applies scope (office / team+own / self) and layers on `custom_matter_access` enables/blocks. Block beats everything except admins. |
+| `buildMatterBasedScopeFilter(resource, action, assignmentColumns)` | `context/scope.ts` | Kysely filter for matter-bearing tables (`matters`, `tasks`, `invoices`, `expenses`). Applies scope (office / team+own / self) and layers on `custom_matter_access` enables/blocks. Block beats everything except admins. |
 | `buildNonMatterScopeFilter(resource, action, assignmentColumns)` | `context/scope.ts` | Kysely filter for tables without `matter_id` (`teams`, `employee_teams`). Same scope semantics, no matter-access layering. |
 | `matters`, `office`, `teams` | `services/office-scoped/*` | Office-scoped services. Require `runAsEmployee` (or `runAsSystem`). |
 | `loggedInUserService` | `services/user-scoped/logged-in-user.service.ts` | User-scoped service. Requires `runAsUser` only. |

@@ -2,14 +2,14 @@ import type { NewTask, TaskPatch } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import { sql } from "kysely";
 import { getEmployeeContext } from "../../context/logged-in-context";
-import { getScope, buildMatterBasedScopeFilter } from "../../context/scope";
+import { getScope, buildMatterTeamSelfScopeFilter, assertInsertScope } from "../../context/scope";
 
 const logger = getLogger(["taskService"]);
 
 const TASKS_RESOURCE = "tasks";
 
 const permitTask = (action: string) =>
-  buildMatterBasedScopeFilter(TASKS_RESOURCE, action, ["assigned_to"]);
+  buildMatterTeamSelfScopeFilter(TASKS_RESOURCE, action, ["assigned_to"]);
 
 export async function get(task_id: string) {
   const { db } = getEmployeeContext();
@@ -75,10 +75,8 @@ export async function search(filters: TaskSearchFilters = {}) {
 }
 
 export async function create(data: NewTask) {
-  const { db, loggedInUserId, loggedInOfficeId, teamIds } = getEmployeeContext();
-  const scope = getScope(TASKS_RESOURCE, "create");
-  if (scope !== "office" && !teamIds.includes(data.team_id)) throw new Error("Unauthorized");
-  if (scope === "self" && data.assigned_to !== loggedInUserId) throw new Error("Unauthorized");
+  const { db, loggedInOfficeId } = getEmployeeContext();
+  assertInsertScope(TASKS_RESOURCE, "create", data, ["assigned_to"]);
   logger.info("Creating new task", data);
   return db.insertInto("tasks")
     .values({ ...data, office_id: loggedInOfficeId })

@@ -30,6 +30,25 @@ export function getScope(resource: string, action: string): Scope {
   return scope;
 }
 
+export function assertInsertScope(
+  resource: string,
+  action: string,
+  data: any,
+  assignmentColumns: string[] = []
+): boolean {
+  const scope = getScope(resource, action);
+  const { teamIds, loggedInUserId, isAdmin, blockMatterIds, addMatterIds } = getEmployeeContext();
+  if (isAdmin) return true;
+  if (data.matter_id && blockMatterIds.includes(data.matter_id)) throw { status: 403, message: "Unauthorized: You are explicitly blocked from modifying this matter" };
+
+  if (scope === "office") return true;
+  if (scope === "team" && teamIds.includes(data.team_id)) return true;
+  if (scope === "self" && assignmentColumns.some(column => data[column] === loggedInUserId)) return true;
+  if (scope === "team" && data.matter_id && addMatterIds.includes(data.matter_id)) return true;
+  throw { status: 403, message: "Unauthorized" };
+}
+
+
 
 type TeamSelfTables = "matters" | "tasks" | "time_entries" | "invoices" | "expenses" | "teams" | "employee_teams";
 export const _buildScopeFilter = <T extends TeamSelfTables> (
@@ -48,10 +67,12 @@ export const _buildScopeFilter = <T extends TeamSelfTables> (
     return eb.or(access_options);
   };
 }
+// fyi access will be granted to assigned resources with the self scope even if the user is not on the team. 
+// we need this because resources may be assigned to a user who is not on the team but has a custom matter access grant.
 
 type TeamSelfMatterTables = "matters" | "tasks"  | "invoices" | "expenses";
 
-export const buildMatterBasedScopeFilter = <T extends TeamSelfMatterTables> (
+export const buildMatterTeamSelfScopeFilter = <T extends TeamSelfMatterTables> (
   resource: string,
   action: string,
   assignmentColumns: readonly ReferenceExpression<DB, T>[]
@@ -81,7 +102,7 @@ export const buildMatterBasedScopeFilter = <T extends TeamSelfMatterTables> (
 // fyi the matter block will NOT BLOCK ADMINS
 // TODO: this ok?
 
-export const buildNonMatterScopeFilter = <T extends TeamSelfTables> (
+export const buildTeamSelfScopeFilter = <T extends TeamSelfTables> (
   resource: string,
   action: string,
   assignmentColumns: readonly ReferenceExpression<DB, T>[]

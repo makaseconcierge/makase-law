@@ -85,11 +85,11 @@ export type LeadPatch = Partial<Omit<Lead, AuditColumns | "lead_id" | "office_id
 
 export type Task = DatesToStrings<Tasks>;
 export type NewTask = Omit<NewTasks, AuditColumns | "office_id">;
-export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id">>;
+export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id"| "matter_id">>;
 
 export type Invoice = DatesToStrings<Invoices>;
 export type NewInvoice = Omit<NewInvoices, AuditColumns | "office_id">;
-export type InvoicePatch = Partial<Omit<Invoice, AuditColumns | "invoice_id" | "office_id">>;
+export type InvoicePatch = Partial<Omit<Invoice, AuditColumns | "invoice_id" | "office_id" | "matter_id">>;
 
 export type Expense = DatesToStrings<Expenses>;
 export type NewExpense = Omit<NewExpenses, AuditColumns | "office_id">;

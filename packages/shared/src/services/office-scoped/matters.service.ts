@@ -1,14 +1,14 @@
 import type { MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import { getEmployeeContext } from "../../context/logged-in-context";
-import { getScope, buildMatterBasedScopeFilter } from "../../context/scope";
+import { buildMatterTeamSelfScopeFilter, assertInsertScope } from "../../context/scope";
 
 const logger = getLogger(["matterService"]);
 
 const MATTERS_RESOURCE = "matters";
 
 const permitMatter = (action: string) =>
-  buildMatterBasedScopeFilter(MATTERS_RESOURCE, action, ["responsible_attorney_id", "supervising_attorney_id"]);
+  buildMatterTeamSelfScopeFilter(MATTERS_RESOURCE, action, ["responsible_attorney_id", "supervising_attorney_id"]);
 
 /**
  * Deferred subquery of matter_ids the caller may access for `action` on
@@ -23,10 +23,8 @@ export function permittedMatterIds(action: string) {
 }
 
 export async function create(data: NewMatter) {
-  const { db, loggedInUserId, loggedInOfficeId, teamIds } = getEmployeeContext();
-  const scope = getScope(MATTERS_RESOURCE, "create");
-  if (scope !== "office" && !teamIds.includes(data.team_id)) throw new Error("Unauthorized");
-  if (scope === "self" && data.responsible_attorney_id !== loggedInUserId) throw new Error("Unauthorized");
+  const { db, loggedInOfficeId } = getEmployeeContext();
+  assertInsertScope(MATTERS_RESOURCE, "create", data, ["responsible_attorney_id", "supervising_attorney_id"]);
   logger.info("Creating new matter", data);
   return db.insertInto("matters")
     .values({ ...data, office_id: loggedInOfficeId })

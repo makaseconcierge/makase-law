@@ -24,10 +24,8 @@ export async function get() {
 }
 
 export async function update(officePatch: OfficePatch) {
-  const { db, loggedInOfficeId, isAdmin, permissions } = getEmployeeContext();
-  if (getScope(OFFICE_RESOURCE, "update") !== "office") {
-    throw new Error("You are not authorized to update the office");
-  }
+  const { db, loggedInOfficeId } = getEmployeeContext();
+  if (getScope(OFFICE_RESOURCE, "update") !== "office") throw { status: 403, message: "Invalid scope for office update" };
   logger.info("Updating office", { officePatch });
   return db
     .updateTable("offices")

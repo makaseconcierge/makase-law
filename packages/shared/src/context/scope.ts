@@ -61,7 +61,7 @@ export const buildMatterBasedScopeFilter = <T extends TeamSelfMatterTables> (
     const { loggedInOfficeId, blockMatterIds, addMatterIds, isAdmin } = getEmployeeContext();
     const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId as OperandValueExpressionOrList<DB, T, "office_id">);
     const nonMatterScopeFilter = _buildScopeFilter(scope, assignmentColumns)(eb);
-    const filterAfterCustomMatterAccess = scope !== "office" && addMatterIds.length ? eb.or([
+    const filterAfterCustomMatterAccess = scope === "team" && addMatterIds.length ? eb.or([
       nonMatterScopeFilter,
       eb("matter_id", "in", addMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">)
     ]): nonMatterScopeFilter;

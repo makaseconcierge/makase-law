@@ -16,12 +16,13 @@ From the root entry:
 | --- | --- | --- |
 | `_rootDb` | `db/_rootDb.ts` | Root Kysely client (`PostgresJSDialect`, `withSchema("app")`, `kysely-postgres-js`). **Only `runAs*` should call `.transaction()` on it** — every other consumer reads the pinned transaction from context. |
 | `runAsUser(user_id, fn)` | `context/run-as.ts` | Opens a Kysely tx, sets `app.acting_user_id` GUC, stashes the tx in `AsyncLocalStorage`. One per request. |
-| `runAsEmployee(employee, permissions, teamIds, fn)` | `context/run-as.ts` | Layers on top of `runAsUser`; sets `app.acting_office_id` GUC and provides the office-scoped `EmployeeContext`. |
+| `runAsEmployee({ employee, permissions, teamIds, blockMatterIds, addMatterIds }, fn)` | `context/run-as.ts` | Layers on top of `runAsUser`; sets `app.acting_office_id` GUC and provides the office-scoped `EmployeeContext` (including the user's `custom_matter_access` enable/block lists). |
 | `runAsSystem(office_id, fn)` | `context/run-as.ts` | Bootstrap / cron path. Attributes to `SYSTEM_USER_ID`; `getScope` short-circuits to `"office"` so services bypass the permissions map. |
 | `SYSTEM_USER_ID` | `context/run-as.ts` | `"00000000-0000-0000-0000-000000000001"` — seeded in the core migration. |
 | `getUserContext()` / `getEmployeeContext()` | `context/logged-in-context.ts` | Read the active context inside services. Throw if not inside the matching `runAs*` scope. |
 | `getScope(resource, action)` | `context/scope.ts` | Resolves caller's scope (`"office"` / `"team"` / `"self"`) from the merged permissions; throws 403-shaped error on miss. |
-| `buildScopeFilter(...)` | `context/scope.ts` | Returns a Kysely query filter that respects scope (office-only, team + own, self only). |
+| `buildMatterBasedScopeFilter(resource, action, assignmentColumns)` | `context/scope.ts` | Kysely filter for matter-bearing tables (`matters`, `tasks`, `time_entries`, `invoices`, `expenses`). Applies scope (office / team+own / self) and layers on `custom_matter_access` enables/blocks. Block beats everything except admins. |
+| `buildNonMatterScopeFilter(resource, action, assignmentColumns)` | `context/scope.ts` | Kysely filter for tables without `matter_id` (`teams`, `employee_teams`). Same scope semantics, no matter-access layering. |
 | `matters`, `office`, `teams` | `services/office-scoped/*` | Office-scoped services. Require `runAsEmployee` (or `runAsSystem`). |
 | `loggedInUserService` | `services/user-scoped/logged-in-user.service.ts` | User-scoped service. Requires `runAsUser` only. |
 | `schemas` | `src/schemas/*` | Zod validators for request bodies (`OfficePatchSchema`, `MatterPatchSchema`, `JsonObjectSchema`). Pair with TS types via `satisfies` to catch DB drift. |
@@ -38,10 +39,10 @@ HTTP request
             │
             │   /office/:office_id/* paths only:
             │     authorizeEmployee
-            │       └─ runAsEmployee(employee, permissions, teamIds, next)
+            │       └─ runAsEmployee({ employee, permissions, teamIds, blockMatterIds, addMatterIds }, next)
             │            ├─ SELECT set_config('app.acting_office_id', office_id, true)
-            │            ├─ AsyncLocalStorage.run({ ...userCtx, loggedInOfficeId, isAdmin,
-            │            │                          isSystem: false, permissions, teamIds }, next)
+            │            ├─ AsyncLocalStorage.run({ ...userCtx, loggedInOfficeId, isAdmin, isSystem: false,
+            │            │                          permissions, teamIds, blockMatterIds, addMatterIds }, next)
             │            └─ services run with full EmployeeContext
             │
             └─ COMMIT (or ROLLBACK on throw — GUCs are LOCAL, cleared automatically)
@@ -52,7 +53,7 @@ The `app.set_audit_fields()` BEFORE-trigger raises if `app.acting_user_id` is un
 ## Service conventions
 
 - Services live under `src/services/{office-scoped,user-scoped}/<resource>.service.ts` and are exported as namespaces (`export * as matters from ...`) so callers write `matters.list()`, `matters.get(id)`.
-- Read operations call `getEmployeeContext()` / `getUserContext()` for `db` and apply `buildScopeFilter("resource", "action", { ... })` to limit rows by the caller's scope.
+- Read operations call `getEmployeeContext()` / `getUserContext()` for `db` and apply `buildMatterBasedScopeFilter("resource", "action", [assignmentCols])` (matter-bearing tables) or `buildNonMatterScopeFilter(...)` (everything else) to limit rows by the caller's scope.
 - Write operations skip explicit audit columns — let the trigger fill them. Throw if the caller lacks the relevant permission scope.
 - Office-scoped services should never be called outside `runAsEmployee` or `runAsSystem` — `getEmployeeContext()` will throw a 500 if the context isn't there.
 - Add a new service by mirroring an existing one (`matters.service.ts` is the most thorough example). Re-export it from `src/index.ts` as a namespace.

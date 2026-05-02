@@ -51,7 +51,7 @@ Hono request
        │   ┌─ /my/*                 user routes — no office context
        │   └─ /office/:office_id/*
        │        └─ authorizeEmployee  403 if no employment in :office_id; sets c.get("employee");
-       │                              runAsEmployee(employee, perms, teamIds, next)
+       │                              runAsEmployee({ employee, permissions, teamIds, blockMatterIds, addMatterIds }, next)
        │             ├─ /info       OfficePatchSchema validation, office.* services
        │             ├─ /matters    matters.* services (scope-filtered)
        │             └─ /my/*       loggedInUserService.* (employment, teams, roles)

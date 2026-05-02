@@ -77,5 +77,5 @@ The `satisfies z.ZodType<OfficePatch>` guard is the workspace pattern — if the
 ## Don't
 
 - Don't import `_rootDb` outside `runAs*`. Reads through it skip the per-request transaction and side-step attribution.
-- Don't pass `created_by`, `updated_by`, `created_at`, `updated_at`, or `deleted_by` in service payloads. Triggers own them.
+- Don't pass `created_by`, `updated_by`, `created_at`, `updated_at` in service payloads. Triggers own them.
 - Don't open nested `runAs*` scopes — service composition (one service calling another inside the same scope) is fine; opening a new transaction is not.

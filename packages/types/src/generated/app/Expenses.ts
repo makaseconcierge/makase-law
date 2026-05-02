@@ -6,10 +6,10 @@ import type { InvoicesInvoiceId } from './Invoices.js';
 import type { JsonValue } from '../../json-types.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app.expenses */
+/** Identifier type for app._expenses */
 export type ExpensesExpenseId = string;
 
-/** Represents the table app.expenses */
+/** Represents the table app._expenses */
 export default interface ExpensesTable {
   expense_id: ColumnType<ExpensesExpenseId, ExpensesExpenseId | undefined, ExpensesExpenseId>;
 
@@ -44,6 +44,10 @@ export default interface ExpensesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
+
+  matter_is_deleted: ColumnType<boolean, boolean | undefined, boolean>;
+
+  matter_is_archived: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 export type Expenses = Selectable<ExpensesTable>;

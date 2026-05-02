@@ -4,10 +4,10 @@ import type { MattersMatterId } from './Matters.js';
 import type { UserProfilesUserId } from './UserProfiles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app.entity_roles */
+/** Identifier type for app._entity_roles */
 export type EntityRolesMatterRole = string;
 
-/** Represents the table app.entity_roles */
+/** Represents the table app._entity_roles */
 export default interface EntityRolesTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
@@ -24,6 +24,10 @@ export default interface EntityRolesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
+
+  matter_is_deleted: ColumnType<boolean, boolean | undefined, boolean>;
+
+  matter_is_archived: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 export type EntityRoles = Selectable<EntityRolesTable>;

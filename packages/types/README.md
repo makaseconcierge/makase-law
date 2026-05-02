@@ -40,7 +40,7 @@ From [`src/index.ts`](src/index.ts) (which re-exports [`makase-types.ts`](src/ma
 - **`Permissions`** — `{ [resource]: { [action]: "self" | "team" | "office" } }` — type of `roles.permissions` JSONB column.
 - **`JsonValue`** — recursive type for arbitrary JSONB columns.
 
-`AuditColumns` (the type aliased internally) is `created_at | created_by | updated_at | updated_by | deleted_at | deleted_by`. Stripping these from write shapes is the boundary that prevents callers from accidentally setting trigger-owned columns.
+`AuditColumns` (the type aliased internally) is `created_at | created_by | updated_at | updated_by. Stripping these from write shapes is the boundary that prevents callers from accidentally setting trigger-owned columns. is_deleted is also stripped from write shapes as this field will be exclusivly controlled by a dedicated delete function
 
 ## When to regenerate
 

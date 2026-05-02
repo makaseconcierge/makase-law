@@ -23,7 +23,7 @@ export * from "./custom/Permissions.js";
  * whatever is passed. Strip them from every write-shape alias below so
  * the TS boundary matches the DB contract.
  *
- * `deleted_at` / `deleted_by` are also stripped: soft-delete belongs in
+ * `is_deleted` also stripped: soft-delete belongs in
  * explicit `softDelete(...)` / `restore(...)` service methods, not in a
  * generic update patch or insert shape.
  */
@@ -32,8 +32,7 @@ type AuditColumns =
   | "created_by"
   | "updated_at"
   | "updated_by"
-  | "deleted_at"
-  | "deleted_by";
+  | "is_deleted";
 
 type DatesToStrings<T> = {
   [K in keyof T]: T[K] extends Date 

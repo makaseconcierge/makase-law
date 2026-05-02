@@ -97,46 +97,9 @@ RETURNS trigger LANGUAGE plpgsql
 SET search_path = ''
 AS $$
 BEGIN
-  RAISE EXCEPTION 'Hard DELETE is not permitted on %. Use soft delete (set deleted_at/deleted_by) instead.', TG_TABLE_NAME;
+  RAISE EXCEPTION 'Hard DELETE is not permitted on %. Use soft delete (set is_deleted = TRUE) instead.', TG_TABLE_NAME;
 END;
 $$;
-
--- Soft-delete attribution is trigger-owned: inserted rows are forced active,
--- and UPDATE callers set/clear deleted_at while the database stamps deleted_by.
-CREATE OR REPLACE FUNCTION app.set_soft_delete_fields()
-RETURNS trigger LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-DECLARE
-  acting UUID;
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    NEW.deleted_at := NULL;
-    NEW.deleted_by := NULL;
-  ELSIF TG_OP = 'UPDATE' THEN
-    IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
-      IF NEW.deleted_at IS NULL THEN
-        NEW.deleted_by := NULL;
-      ELSE
-        acting := NULLIF(current_setting('app.acting_user_id', true), '')::uuid;
-        IF acting IS NULL THEN
-          RAISE EXCEPTION
-            'app.acting_user_id is not set — soft delete attribution for %.% requires runAs(...) or runAsSystem(...)',
-            TG_TABLE_SCHEMA, TG_TABLE_NAME
-            USING ERRCODE = 'insufficient_privilege';
-        END IF;
-        NEW.deleted_by := acting;
-      END IF;
-    ELSE
-      -- Prevent callers from changing deleted_by without a delete/restore.
-      NEW.deleted_by := OLD.deleted_by;
-    END IF;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
 
 CREATE OR REPLACE FUNCTION app.setup_auditable_table(tbl TEXT)
 RETURNS void LANGUAGE plpgsql
@@ -224,12 +187,11 @@ BEGIN
 END;
 $$;
 
--- Adds soft-delete columns, creates active/all views, and attaches
--- soft-delete protection triggers.
--- Call after setup_office_scoped_table so the soft-delete trigger can run before
--- set_audit_fields checks whether the UPDATE is a no-op.
+-- Adds an `is_deleted` boolean, creates active/all views, and attaches
+-- INSTEAD OF DELETE triggers on each view to block hard deletes via the view.
 -- Expects the underscored base table to already exist with office_id.
--- Indexes that reference deleted_at must come AFTER this call.
+-- "When was it deleted / by whom" lives in app.audit_log (the diff entry
+-- where is_deleted flipped FALSE -> TRUE) — not on the row itself.
 CREATE OR REPLACE FUNCTION app.setup_soft_delete(tbl TEXT)
 RETURNS void LANGUAGE plpgsql
 SET search_path = ''
@@ -238,20 +200,12 @@ DECLARE
   base_name TEXT := SUBSTRING(tbl, 2);
 BEGIN
   EXECUTE format(
-    'ALTER TABLE app.%I '
-    'ADD COLUMN deleted_at TIMESTAMPTZ, '
-    'ADD COLUMN deleted_by UUID REFERENCES app.user_profiles(user_id), '
-    'ADD CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))',
+    'ALTER TABLE app.%I ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE',
     tbl
   );
   EXECUTE format(
-    'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON app.%I '
-    'FOR EACH ROW EXECUTE FUNCTION app.set_soft_delete_fields()',
-    '00_soft_delete_fields' || tbl, tbl
-  );
-  EXECUTE format(
     'CREATE VIEW app.%I WITH (security_invoker = true) '
-    'AS SELECT * FROM app.%I WHERE deleted_at IS NULL',
+    'AS SELECT * FROM app.%I WHERE NOT is_deleted',
     base_name, tbl
   );
   EXECUTE format(
@@ -342,7 +296,7 @@ BEGIN
   END LOOP;
 
   -- Prefer the per-transaction GUC (set by runAs) so an UPDATE that
-  -- only flipped deleted_at still logs the actor who issued it. Fall
+  -- only flipped is_deleted still logs the actor who issued it. Fall
   -- back to the row's own updated_by (which set_audit_fields wrote
   -- from the same GUC) so direct-SQL writes without runAs still log.
   acting := COALESCE(
@@ -479,8 +433,8 @@ CREATE TABLE app._employees (
     PRIMARY KEY (office_id, user_id)
 );
 SELECT app.setup_soft_delete('_employees'); -- used to deactivate employees from a firm, but they are still in the system for historical purposes and to keep tasks that were assigned to them before they were deactivated etc.
-CREATE INDEX ON app._employees(user_id) WHERE deleted_at IS NULL;
-CREATE INDEX ON app._employees(office_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._employees(user_id) WHERE NOT is_deleted;
+CREATE INDEX ON app._employees(office_id) WHERE NOT is_deleted;
 
 CREATE OR REPLACE FUNCTION app.permitted_office_ids() 
 RETURNS SETOF uuid LANGUAGE sql SECURITY DEFINER STABLE
@@ -488,7 +442,7 @@ SET search_path = ''
 AS $$
   SELECT office_id 
   FROM app._employees 
-  WHERE user_id = (SELECT app.acting_user_id()) AND deleted_at IS NULL;
+  WHERE user_id = (SELECT app.acting_user_id()) AND NOT is_deleted;
 $$;
 
 -- RLS policy expressions invoke these; api must be able to call them.
@@ -604,7 +558,7 @@ CREATE TABLE app._matters (
     description TEXT NOT NULL DEFAULT '',
     stage       TEXT NOT NULL DEFAULT 'consultation',
     type        TEXT NOT NULL DEFAULT 'general',
-    billing_type TEXT NOT NULL,
+    billing_type TEXT NOT NULL DEFAULT 'none',
     billing_settings JSONB NOT NULL DEFAULT '{}'::jsonb, -- need these here because they could change in settings but once contract is signed they are locked in
     started_representation_at    TIMESTAMPTZ,
     ended_representation_at      TIMESTAMPTZ,
@@ -614,43 +568,85 @@ CREATE TABLE app._matters (
     -- scope TEXT NOT NULL DEFAULT '', -- TODO: this is in matter data, should it be top level?
     preferred_office_location TEXT NOT NULL DEFAULT '',
     data        JSONB NOT NULL DEFAULT '{}'::jsonb,
-    archived_at                  TIMESTAMPTZ,
-    archived_by                  UUID,
-    FOREIGN KEY (office_id, archived_by) REFERENCES app._employees(office_id, user_id),
+    is_archived                  BOOLEAN NOT NULL DEFAULT FALSE,
 
 
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
     CONSTRAINT matters_team_uk UNIQUE (office_id, matter_id, team_id),
-    CONSTRAINT matters_archived_uk UNIQUE (office_id, matter_id, archived_at),
+    CONSTRAINT matters_archived_uk UNIQUE (office_id, matter_id, is_archived),
     CONSTRAINT matters_billing_type_check CHECK (billing_type IN (
-        'hourly', 'flat_fee', 'flat_fee_plus_hourly'
-    )), -- TODO: lock these down 
+        'none', 'hourly', 'flat_fee', 'flat_fee_plus_hourly'
+    )), -- TODO: lock these down
     CONSTRAINT matters_stage_check CHECK (stage IN (
         'consultation', 'setup', 'active', 'closed', 'archived'
-    )),
-    CONSTRAINT matters_archived_check CHECK ((archived_at IS NULL) = (archived_by IS NULL))
+    ))
 );
 SELECT app.setup_office_scoped_table('_matters');
 SELECT app.setup_soft_delete('_matters');
-CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS NULL;
-CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS NULL;
-CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
+ALTER TABLE app._matters ADD CONSTRAINT matters_deleted_uk UNIQUE (office_id, matter_id, is_deleted);
+CREATE INDEX ON app._matters(office_id)                     WHERE NOT is_deleted;
+CREATE INDEX ON app._matters(office_id, team_id)            WHERE NOT is_deleted;
+CREATE INDEX ON app._matters(stage)                         WHERE NOT is_deleted;
 
-CREATE TABLE app.custom_matter_access (
+
+-- Matter-based tables inherit their visibility from the parent matter via
+-- two cascade columns: matter_is_deleted and matter_is_archived. Booleans
+-- (not nullable timestamps) so that ON UPDATE CASCADE actually fires when
+-- the matter flips FALSE -> TRUE — MATCH SIMPLE skips the FK check entirely
+-- when any referencing column is NULL, which would break the cascade.
+-- "When did this happen / by whom" lives in app.audit_log on the matter row.
+CREATE FUNCTION app.setup_matter_based_table(tbl TEXT)
+RETURNS void LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  base_name TEXT := SUBSTRING(tbl, 2);
+BEGIN
+  PERFORM app.setup_office_scoped_table(tbl);
+  EXECUTE format(
+    'ALTER TABLE app.%I '
+    'ADD COLUMN matter_is_deleted BOOLEAN NOT NULL DEFAULT FALSE, '
+    'ADD FOREIGN KEY (office_id, matter_id, matter_is_deleted) REFERENCES app._matters(office_id, matter_id, is_deleted) ON DELETE CASCADE ON UPDATE CASCADE, '
+    'ADD COLUMN matter_is_archived BOOLEAN NOT NULL DEFAULT FALSE, '
+    'ADD FOREIGN KEY (office_id, matter_id, matter_is_archived) REFERENCES app._matters(office_id, matter_id, is_archived) ON DELETE CASCADE ON UPDATE CASCADE',
+    tbl
+  );
+  EXECUTE format(
+    'CREATE VIEW app.%I WITH (security_invoker = true) '
+    'AS SELECT * FROM app.%I WHERE NOT matter_is_deleted',
+    base_name, tbl
+  );
+  EXECUTE format(
+    'CREATE TRIGGER no_delete INSTEAD OF DELETE ON app.%I '
+    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
+    base_name
+  );
+  EXECUTE format(
+    'CREATE VIEW app.%I_all WITH (security_invoker = true) '
+    'AS SELECT * FROM app.%I',
+    base_name, tbl
+  );
+  EXECUTE format(
+    'CREATE TRIGGER no_delete_all INSTEAD OF DELETE ON app.%I_all '
+    'FOR EACH ROW EXECUTE FUNCTION app.prevent_delete()',
+    base_name
+  );
+END;
+$$;
+
+CREATE TABLE app._custom_matter_access (
     office_id UUID NOT NULL REFERENCES app.offices(office_id),
+    matter_id UUID NOT NULL,
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id) ON DELETE CASCADE ON UPDATE CASCADE,
     user_id UUID NOT NULL,
     FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
-    matter_id UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
-    matter_archived_at TIMESTAMPTZ,
-    FOREIGN KEY (office_id, matter_id, matter_archived_at) REFERENCES app._matters(office_id, matter_id, archived_at) ON UPDATE CASCADE ON DELETE CASCADE,
     access_modifier TEXT NOT NULL,
     CONSTRAINT custom_matter_access_access_modifier_check CHECK (access_modifier IN (
-        'enable', 'block'
+        'add', 'block'
     )),
-    PRIMARY KEY (office_id, user_id, matter_id)
+    PRIMARY KEY (office_id, matter_id, user_id)
 );
-SELECT app.setup_office_scoped_table('custom_matter_access');
+SELECT app.setup_matter_based_table('_custom_matter_access');
 
 -- ENTITIES (universal person/organization registry)
 CREATE TABLE app.entities (
@@ -673,7 +669,7 @@ CREATE INDEX ON app.entities USING gin (full_legal_name gin_trgm_ops);
 
 
 -- ENTITY_ROLES (links entities to matters with their matter_role)
-CREATE TABLE app.entity_roles (
+CREATE TABLE app._entity_roles (
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     entity_id   UUID NOT NULL,
     FOREIGN KEY (office_id, entity_id) REFERENCES app.entities(office_id, entity_id),
@@ -686,8 +682,7 @@ CREATE TABLE app.entity_roles (
         'prospective_client', 'client', 'opposing_party', 'witness', 'expert', 'attorney', 'other'
     ))
 );
-SELECT app.setup_office_scoped_table('entity_roles');
-CREATE INDEX ON app.entity_roles(matter_id);
+SELECT app.setup_matter_based_table('_entity_roles');
 
 
 -- LEADS (intake pipeline)
@@ -774,7 +769,7 @@ CREATE INDEX ON app.leads(assigned_attorney_user_id)       WHERE assigned_attorn
 -- Tasks
 -- team_id consistency with parent matter/lead is enforced by the composite FKs below
 -- (MATCH SIMPLE: FK is skipped when matter_id/lead_id is NULL, enforced when set).
-CREATE TABLE app.tasks (
+CREATE TABLE app._tasks (
     task_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
@@ -805,23 +800,19 @@ CREATE TABLE app.tasks (
     )
 
 );
-SELECT app.setup_office_scoped_table('tasks');
-CREATE INDEX ON app.tasks(office_id);
-CREATE INDEX ON app.tasks(office_id, team_id);
-CREATE INDEX ON app.tasks(matter_id) WHERE matter_id IS NOT NULL;
-CREATE INDEX ON app.tasks(lead_id) WHERE lead_id IS NOT NULL;
-CREATE INDEX ON app.tasks(assigned_to) WHERE assigned_to IS NOT NULL;
-CREATE INDEX ON app.tasks(status);
+SELECT app.setup_matter_based_table('_tasks');
+CREATE INDEX ON app._tasks(assigned_to) WHERE assigned_to IS NOT NULL;
+CREATE INDEX ON app._tasks(status);
 
 
 -- INVOICES
-CREATE TABLE app.invoices (
+CREATE TABLE app._invoices (
     invoice_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     matter_id   UUID NOT NULL,
-    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
+    FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON DELETE NO ACTION ON UPDATE CASCADE,
     status      TEXT NOT NULL DEFAULT 'new',
     notes       TEXT,
     due_date    TIMESTAMPTZ,
@@ -842,14 +833,18 @@ CREATE TABLE app.invoices (
         'draft', 'approved', 'sent', 'paid', 'closed'
     ))
 );
-SELECT app.setup_office_scoped_table('invoices');
-CREATE INDEX ON app.invoices(office_id);
-CREATE INDEX ON app.invoices(office_id, team_id);
-CREATE INDEX ON app.invoices(matter_id) WHERE matter_id IS NOT NULL;
-CREATE INDEX ON app.invoices(office_id, status);
+SELECT app.setup_matter_based_table('_invoices');
+CREATE INDEX ON app._invoices(office_id);
+CREATE INDEX ON app._invoices(office_id, team_id);
+CREATE INDEX ON app._invoices(matter_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX ON app._invoices(office_id, status);
 
 
 -- TIME_ENTRIES
+-- since this table does not link directly to a matter and so does not include carve outs for custom_matter_access
+-- this allows any team members blocked from a matter to still manage time entries for task attributed to the matter
+-- this is perfectly ok since there is absolutely no matter related information stored in this table. 
+-- ex. an accountant at the firm needs to be walled off from a matter but still needs to see time entries in order to deal with payroll
 CREATE TABLE app.time_entries (
     time_entry_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id         UUID NOT NULL REFERENCES app.offices(office_id) ON DELETE NO ACTION,
@@ -861,16 +856,16 @@ CREATE TABLE app.time_entries (
     team_id           UUID NOT NULL,
     FOREIGN KEY (office_id, team_id) REFERENCES app.teams(office_id, team_id) ON DELETE NO ACTION,
     task_id           UUID NOT NULL,
-    FOREIGN KEY (office_id, task_id, team_id) REFERENCES app.tasks(office_id, task_id, team_id) ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (office_id, task_id, team_id) REFERENCES app._tasks(office_id, task_id, team_id) ON UPDATE CASCADE ON DELETE NO ACTION,
     invoice_id        UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
+    FOREIGN KEY (office_id, invoice_id) REFERENCES app._invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     user_id           UUID NOT NULL,
     FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id) ON DELETE NO ACTION,
     start_timestamp   TIMESTAMPTZ NOT NULL,
     end_timestamp     TIMESTAMPTZ NOT NULL,
     duration_seconds  INTEGER NOT NULL GENERATED ALWAYS AS (EXTRACT(EPOCH FROM (end_timestamp - start_timestamp))::INTEGER) STORED,
-
-    description       TEXT,
+    is_manual BOOLEAN NOT NULL DEFAULT FALSE, -- true if the time entry was manually entered by the user, false if it was entered via the time tracking app
+    notes       TEXT NOT NULL DEFAULT '',
 
     CONSTRAINT time_entries_office_uk UNIQUE (office_id, time_entry_id),
     CONSTRAINT time_entries_timestamp_check CHECK (start_timestamp < end_timestamp)
@@ -886,7 +881,7 @@ CREATE INDEX ON app.time_entries(office_id, task_id, start_timestamp DESC);
 
 
 -- EXPENSES
-CREATE TABLE app.expenses (
+CREATE TABLE app._expenses (
     expense_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     office_id   UUID NOT NULL REFERENCES app.offices(office_id),
     team_id     UUID NOT NULL,
@@ -896,7 +891,7 @@ CREATE TABLE app.expenses (
     user_id     UUID NOT NULL,
     FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
     invoice_id  UUID,
-    FOREIGN KEY (office_id, invoice_id) REFERENCES app.invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
+    FOREIGN KEY (office_id, invoice_id) REFERENCES app._invoices(office_id, invoice_id) ON DELETE SET NULL (invoice_id),
     amount      NUMERIC NOT NULL,
     description TEXT,
     is_reimbursable BOOLEAN NOT NULL DEFAULT FALSE,
@@ -907,10 +902,10 @@ CREATE TABLE app.expenses (
 
     CONSTRAINT expenses_office_uk UNIQUE (office_id, expense_id)
 );
-SELECT app.setup_office_scoped_table('expenses');
-CREATE INDEX ON app.expenses(office_id);
-CREATE INDEX ON app.expenses(matter_id) WHERE matter_id IS NOT NULL;
-CREATE INDEX ON app.expenses(invoice_id) WHERE invoice_id IS NOT NULL;
+SELECT app.setup_matter_based_table('_expenses');
+CREATE INDEX ON app._expenses(office_id);
+CREATE INDEX ON app._expenses(matter_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX ON app._expenses(invoice_id) WHERE invoice_id IS NOT NULL;
 
 
 -- INVOICE_PAYMENTS
@@ -925,7 +920,7 @@ CREATE TABLE app.invoice_payments (
     matter_id   UUID NOT NULL,
     FOREIGN KEY (office_id, matter_id, team_id) REFERENCES app._matters(office_id, matter_id, team_id) ON UPDATE CASCADE,
     invoice_id  UUID,
-    FOREIGN KEY (office_id, matter_id, invoice_id) REFERENCES app.invoices(office_id, matter_id, invoice_id) ON DELETE NO ACTION,
+    FOREIGN KEY (office_id, matter_id, invoice_id) REFERENCES app._invoices(office_id, matter_id, invoice_id) ON DELETE NO ACTION,
     amount      NUMERIC NOT NULL CHECK (amount > 0),
     payment_date TIMESTAMPTZ NOT NULL,
     notes TEXT,

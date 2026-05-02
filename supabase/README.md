@@ -12,7 +12,7 @@ auth.users                -- Supabase-managed auth rows (login, sessions)
        └─ app._employees  -- firm-controlled identity for firm staff (per office)
 ```
 
-Auditable tables FK-reference `user_profiles(user_id)` for `created_by` / `updated_by`; soft-deletable tables also use it for trigger-owned `deleted_by`. Office-scoped rows hang off `offices(office_id)` as the tenant boundary, and `audit_log.office_id` is the handle used for permissioned audit viewing.
+Auditable tables FK-reference `user_profiles(user_id)` for `created_by` / `updated_by`; Office-scoped rows hang off `offices(office_id)` as the tenant boundary, and `audit_log.office_id` is the handle used for permissioned audit viewing.
 
 ## Conventions
 
@@ -20,15 +20,13 @@ Auditable tables FK-reference `user_profiles(user_id)` for `created_by` / `updat
 
 Only tables that benefit from soft delete use the underscore/view pattern:
 
-- `app._foo` — the underlying table, including nullable `deleted_at` / `deleted_by`.
-- `app.foo` — a view over `app._foo` that filters `WHERE deleted_at IS NULL`.
+- `app._foo` — the underlying table.
+- `app.foo` — a view over `app._foo` that filters `WHERE NOT is_deleted`.
 - `app.foo_all` — a view over `app._foo` with no active-row filter, for ergonomic joins that need historical rows.
 
 Tables that are not soft-deletable are created directly as `app.foo`. Application code should use the clean view/table names and reserve underscored tables for admin/debugging cases.
 
-Soft deletes are performed as `UPDATE ... SET deleted_at = NOW()` through the active view. `deleted_by` is trigger-owned and is stamped from `app.acting_user_id`; inserted rows are always forced active.
-
-A `CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))` enforces that the two columns move together — you can't have one set without the other.
+Soft deletes are performed as `UPDATE ... SET is_deleted = true` inserted rows are always forced active.
 
 Every view is created `WITH (security_invoker = true)` so it runs with the caller's privileges (defense in depth in case the `app` schema is ever exposed).
 
@@ -47,16 +45,15 @@ updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 updated_by  UUID NOT NULL DEFAULT app.acting_user_id() REFERENCES app.user_profiles(user_id)
 ```
 
-Soft-deletable tables get two additional columns from `app.setup_soft_delete()`:
+Soft-deletable tables get boolean is_deleted column and views that defaults the non underscore table name to only non deleted rows `app.setup_soft_delete()`:
 
 ```
-deleted_at  TIMESTAMPTZ
-deleted_by  UUID REFERENCES app.user_profiles(user_id)
+is_deleted boolean not null default false
 ```
 
 These columns do not appear in CREATE TABLE statements. The helper functions add them, then attach the relevant triggers. The `app.acting_user_id()` DEFAULT makes the audit columns optional in TypeScript insert types (`Generated<>` in Kysely codegen / kanel); the BEFORE INSERT trigger still overwrites whatever value the DEFAULT produces, so the DEFAULT is purely for DX.
 
-Application code must not set `created_by`, `updated_by`, `created_at`, `updated_at`, or `deleted_by` itself. See the **Attribution** section below for how attribution flows from the application into the triggers.
+Application code must not set `created_by`, `updated_by`, `created_at`, or `updated_at` itself. See the **Attribution** section below for how attribution flows from the application into the triggers.
 
 ### Tenant safety via composite foreign keys
 
@@ -66,7 +63,7 @@ Each office-scoped table therefore carries a `<table>_office_uk UNIQUE (office_i
 
 ### Partial indexes for soft-deleted tables
 
-For soft-deleted tables, partial indexes matching `WHERE deleted_at IS NULL` keep index scans tight and skip historical rows. Nullable FK indexes additionally include `... IS NOT NULL` in the predicate. Non-soft-deleted tables use ordinary indexes.
+For soft-deleted tables, partial indexes matching `WHERE not is_deleted` keep index scans tight and skip historical rows. Nullable FK indexes additionally include `... IS NOT NULL` in the predicate. Non-soft-deleted tables use ordinary indexes.
 
 ## Identity model
 
@@ -93,7 +90,7 @@ Both trigger functions are `SECURITY DEFINER` with `search_path = ''` because th
 
 ## Attribution
 
-Every write to an auditable table must be attributed to a user. This is enforced by the `app.set_audit_fields()` BEFORE INSERT OR UPDATE trigger, which reads the per-transaction GUC `app.acting_user_id` and uses it to populate `created_by` / `updated_by`. Soft-deletable tables also run `app.set_soft_delete_fields()`, which stamps `deleted_by` on delete/restore transitions and prevents caller-controlled `deleted_by`. If the GUC is unset, the triggers raise — you cannot silently write an unattributed row.
+Every write to an auditable table must be attributed to a user. This is enforced by the `app.set_audit_fields()` BEFORE INSERT OR UPDATE trigger, which reads the per-transaction GUC `app.acting_user_id` and uses it to populate `created_by` / `updated_by` . If the GUC is unset, the triggers raise — you cannot silently write an unattributed row.
 
 The GUC is set by the shared `runAs(user_id, fn)` helper in `@makase-law/shared`, which opens a Kysely transaction, calls `set_config('app.acting_user_id', user_id, true)` on that connection, stashes the transaction handle in `AsyncLocalStorage`, then runs `fn`. Every Kysely query inside `fn` that goes through `getDb()` runs on that same pinned connection, so writes land in the attributed transaction. On commit or rollback, the GUC is automatically cleared (`is_local = true`).
 
@@ -104,7 +101,7 @@ The Hono API wires this into a `withTx` middleware that wraps mutating requests 
 **Consequences for application code:**
 
 - Never pass `created_by`, `updated_by`, `created_at`, `updated_at` in a service's `insert`/`update` payload — the trigger overwrites them.
-- To soft-delete, set `deleted_at = NOW()`. To restore, set `deleted_at = NULL`. Never set `deleted_by`; the trigger owns it.
+- To soft-delete, set `is_deleted=true`. To restore, set `is_deleted=false`.
 - Any code path that writes — including migrations with backfills, seed scripts, and one-off psql sessions — must first set `app.acting_user_id`, typically via `SELECT set_config('app.acting_user_id', '<uuid>', true)` inside a transaction.
 
 ### SYSTEM user
@@ -138,10 +135,10 @@ CREATE TABLE app._foo (
 );
 SELECT app.setup_auditable_table('_foo');
 SELECT app.setup_soft_delete('_foo'); -- only if this table should be soft-deleted
-CREATE INDEX ON app._foo(office_id) WHERE deleted_at IS NULL;
+CREATE INDEX ON app._foo(office_id) WHERE NOT is_deleted;
 ```
 
-`app.setup_auditable_table('_foo')` adds audit columns and attaches audit attribution/log triggers. `app.setup_soft_delete('_foo')` adds soft-delete columns, creates `app.foo` / `app.foo_all`, and blocks hard deletes through those views. Indexes that reference `deleted_at` must come after `setup_soft_delete()` because the column does not exist until then.
+`app.setup_auditable_table('_foo')` adds audit columns and attaches audit attribution/log triggers. `app.setup_soft_delete('_foo')` adds soft-delete column, creates `app.foo` / `app.foo_all`, and blocks hard deletes through those views. Indexes that reference `is_deleted` must come after `setup_soft_delete()` because the column does not exist until then.
 
 If the new table needs tenant-safe FK references from other tables, the composite `(office_id, foo_id)` unique constraint above is what enables them.
 

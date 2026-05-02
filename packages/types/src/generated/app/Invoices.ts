@@ -4,10 +4,10 @@ import type { MattersMatterId } from './Matters.js';
 import type { UserProfilesUserId } from './UserProfiles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app.invoices */
+/** Identifier type for app._invoices */
 export type InvoicesInvoiceId = string;
 
-/** Represents the table app.invoices */
+/** Represents the table app._invoices */
 export default interface InvoicesTable {
   invoice_id: ColumnType<InvoicesInvoiceId, InvoicesInvoiceId | undefined, InvoicesInvoiceId>;
 
@@ -40,6 +40,10 @@ export default interface InvoicesTable {
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
   updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
+
+  matter_is_deleted: ColumnType<boolean, boolean | undefined, boolean>;
+
+  matter_is_archived: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 export type Invoices = Selectable<InvoicesTable>;

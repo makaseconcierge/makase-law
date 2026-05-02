@@ -29,7 +29,7 @@ export default interface MattersTable {
 
   type: ColumnType<string, string | undefined, string>;
 
-  billing_type: ColumnType<string, string, string>;
+  billing_type: ColumnType<string, string | undefined, string>;
 
   billing_settings: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 
@@ -47,9 +47,7 @@ export default interface MattersTable {
 
   data: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 
-  archived_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  archived_by: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
+  is_archived: ColumnType<boolean, boolean | undefined, boolean>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -59,9 +57,7 @@ export default interface MattersTable {
 
   updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
-
-  deleted_by: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
+  is_deleted: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 export type Matters = Selectable<MattersTable>;

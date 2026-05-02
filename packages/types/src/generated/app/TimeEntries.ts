@@ -28,7 +28,9 @@ export default interface TimeEntriesTable {
 
   duration_seconds: ColumnType<number, never, never>;
 
-  description: ColumnType<string | null, string | null, string | null>;
+  is_manual: ColumnType<boolean, boolean | undefined, boolean>;
+
+  notes: ColumnType<string, string | undefined, string>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 

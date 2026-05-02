@@ -49,7 +49,7 @@ export const _buildScopeFilter = <T extends TeamSelfTables> (
   };
 }
 
-type TeamSelfMatterTables = "matters" | "tasks" | "time_entries" | "invoices" | "expenses";
+type TeamSelfMatterTables = "matters" | "tasks"  | "invoices" | "expenses";
 
 export const buildMatterBasedScopeFilter = <T extends TeamSelfMatterTables> (
   resource: string,
@@ -61,10 +61,12 @@ export const buildMatterBasedScopeFilter = <T extends TeamSelfMatterTables> (
     const { loggedInOfficeId, blockMatterIds, addMatterIds, isAdmin } = getEmployeeContext();
     const isLoggedInOffice = eb("office_id", "=", loggedInOfficeId as OperandValueExpressionOrList<DB, T, "office_id">);
     const nonMatterScopeFilter = _buildScopeFilter(scope, assignmentColumns)(eb);
-    const filterAfterCustomMatterAccess = scope === "team" && addMatterIds.length ? eb.or([
-      nonMatterScopeFilter,
-      eb("matter_id", "in", addMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">)
-    ]): nonMatterScopeFilter;
+    const filterAfterCustomMatterAccess = scope === "team" && addMatterIds.length ?
+      eb.or([
+        nonMatterScopeFilter,
+        eb("matter_id", "in", addMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">)
+      ])
+      : nonMatterScopeFilter;
 
     const blockMatterFilter = blockMatterIds.length && !isAdmin ?
       eb.not(eb("matter_id", "in", blockMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">))

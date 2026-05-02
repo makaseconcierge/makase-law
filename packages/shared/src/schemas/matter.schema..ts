@@ -51,13 +51,14 @@ export const NewMatterSchema = matterFieldsSchema
     team_id: z.uuid(),
     responsible_attorney_id: z.uuid(),
     supervising_attorney_id: z.uuid().nullable().optional(),
+    billing_type: z.enum(BILLING_TYPES),
   })
   .strict() satisfies z.ZodType<NewMatter>;
 
 /**
  * Runtime validator for PATCH payloads to an existing matter. Callers
  * who want to archive should use the dedicated (future)
- * `matters.archive()` service method; `archived_at` is intentionally
+ * `matters.archive()` service method; `is_archived` is intentionally
  * not patchable here. Reassigning a matter to a different team is
  * intentionally not supported via PATCH — too many invariants (tasks,
  * invoices, expenses re-key on team_id) — and would be a dedicated

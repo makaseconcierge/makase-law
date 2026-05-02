@@ -72,7 +72,7 @@ export async function getCustomMatterAccessAtOffice(office_id: string) {
     .select(["matter_id", "access_modifier"])
     .where("office_id", "=", office_id)
     .where("user_id", "=", loggedInUserId)
-    .where("matter_archived_at", "is", null)
+    .where("matter_is_archived", "is", false)
     .execute();
 }
 

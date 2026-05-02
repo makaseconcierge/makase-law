@@ -1,7 +1,7 @@
 import type { OfficesOfficeId } from './Offices.js';
 import type { TeamsTeamId } from './Teams.js';
 import type { MattersMatterId } from './Matters.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
 import type { JsonValue } from '../../json-types.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
@@ -19,7 +19,7 @@ export default interface ExpensesTable {
 
   matter_id: ColumnType<MattersMatterId | null, MattersMatterId | null, MattersMatterId | null>;
 
-  user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+  user_id: ColumnType<UserProfilesUserId, UserProfilesUserId, UserProfilesUserId>;
 
   invoice_id: ColumnType<InvoicesInvoiceId | null, InvoicesInvoiceId | null, InvoicesInvoiceId | null>;
 
@@ -39,11 +39,11 @@ export default interface ExpensesTable {
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  created_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
 export type Expenses = Selectable<ExpensesTable>;

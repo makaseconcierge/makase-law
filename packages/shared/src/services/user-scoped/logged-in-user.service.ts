@@ -65,6 +65,17 @@ export async function getRolesAtOffice(office_id: string) {
     .execute();
 }
 
+export async function getCustomMatterAccessAtOffice(office_id: string) {
+  const { db, loggedInUserId } = getUserContext();
+  logger.trace("Getting custom matter access for office", { office_id });
+  return db.selectFrom("custom_matter_access")
+    .select(["matter_id", "access_modifier"])
+    .where("office_id", "=", office_id)
+    .where("user_id", "=", loggedInUserId)
+    .where("matter_archived_at", "is", null)
+    .execute();
+}
+
 export async function getEmploymentAtOffice(office_id: string) {
   const { db, loggedInUserId } = getUserContext();
   logger.trace("Getting employee");

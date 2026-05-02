@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../json-types.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { OfficesOfficeId } from './Offices.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
@@ -20,7 +20,7 @@ export default interface AuditLogTable {
 
   diff: ColumnType<JsonValue, JsonValue, JsonValue>;
 
-  changed_by: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+  changed_by: ColumnType<UserProfilesUserId, UserProfilesUserId, UserProfilesUserId>;
 
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 

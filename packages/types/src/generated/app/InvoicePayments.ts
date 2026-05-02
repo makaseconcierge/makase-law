@@ -3,7 +3,7 @@ import type { TeamsTeamId } from './Teams.js';
 import type { MattersMatterId } from './Matters.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
 import type { JsonValue } from '../../json-types.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app.invoice_payments */
@@ -37,11 +37,11 @@ export default interface InvoicePaymentsTable {
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  created_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
 export type InvoicePayments = Selectable<InvoicePaymentsTable>;

@@ -1,21 +1,19 @@
 import type { OfficesOfficeId } from './Offices.js';
-import type { EntitiesEntityId } from './Entities.js';
-import type { MattersMatterId } from './Matters.js';
 import type { UserProfilesUserId } from './UserProfiles.js';
+import type { MattersMatterId } from './Matters.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
-/** Identifier type for app.entity_roles */
-export type EntityRolesMatterRole = string;
-
-/** Represents the table app.entity_roles */
-export default interface EntityRolesTable {
+/** Represents the table app.custom_matter_access */
+export default interface CustomMatterAccessTable {
   office_id: ColumnType<OfficesOfficeId, OfficesOfficeId, OfficesOfficeId>;
 
-  entity_id: ColumnType<EntitiesEntityId, EntitiesEntityId, EntitiesEntityId>;
+  user_id: ColumnType<UserProfilesUserId, UserProfilesUserId, UserProfilesUserId>;
 
   matter_id: ColumnType<MattersMatterId, MattersMatterId, MattersMatterId>;
 
-  matter_role: ColumnType<EntityRolesMatterRole, EntityRolesMatterRole, EntityRolesMatterRole>;
+  matter_archived_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+
+  access_modifier: ColumnType<string, string, string>;
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -26,8 +24,8 @@ export default interface EntityRolesTable {
   updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
-export type EntityRoles = Selectable<EntityRolesTable>;
+export type CustomMatterAccess = Selectable<CustomMatterAccessTable>;
 
-export type NewEntityRoles = Insertable<EntityRolesTable>;
+export type NewCustomMatterAccess = Insertable<CustomMatterAccessTable>;
 
-export type EntityRolesUpdate = Updateable<EntityRolesTable>;
+export type CustomMatterAccessUpdate = Updateable<CustomMatterAccessTable>;

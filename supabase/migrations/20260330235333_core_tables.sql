@@ -369,7 +369,7 @@ $$;
 
 -- USER PROFILES
 CREATE TABLE app.user_profiles (
-    user_id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE NO ACTION,
+    user_id         UUID PRIMARY KEY,
     display_name    TEXT NOT NULL,
     email           TEXT NOT NULL UNIQUE,
     phone           TEXT
@@ -476,7 +476,6 @@ CREATE TABLE app._employees (
     full_legal_name     TEXT NOT NULL,
     bar_numbers         JSONB NOT NULL DEFAULT '[]'::jsonb, -- [{state: string, number: string}]
     is_admin            BOOLEAN NOT NULL DEFAULT FALSE,
-    is_system           BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (office_id, user_id)
 );
 SELECT app.setup_soft_delete('_employees'); -- used to deactivate employees from a firm, but they are still in the system for historical purposes and to keep tasks that were assigned to them before they were deactivated etc.
@@ -622,6 +621,7 @@ CREATE TABLE app._matters (
 
     CONSTRAINT matters_office_uk UNIQUE (office_id, matter_id),
     CONSTRAINT matters_team_uk UNIQUE (office_id, matter_id, team_id),
+    CONSTRAINT matters_archived_uk UNIQUE (office_id, matter_id, archived_at),
     CONSTRAINT matters_billing_type_check CHECK (billing_type IN (
         'hourly', 'flat_fee', 'flat_fee_plus_hourly'
     )), -- TODO: lock these down 
@@ -636,6 +636,21 @@ CREATE INDEX ON app._matters(office_id)                     WHERE deleted_at IS 
 CREATE INDEX ON app._matters(office_id, team_id)            WHERE deleted_at IS NULL;
 CREATE INDEX ON app._matters(stage)                         WHERE deleted_at IS NULL;
 
+CREATE TABLE app.custom_matter_access (
+    office_id UUID NOT NULL REFERENCES app.offices(office_id),
+    user_id UUID NOT NULL,
+    FOREIGN KEY (office_id, user_id) REFERENCES app._employees(office_id, user_id),
+    matter_id UUID NOT NULL,
+    FOREIGN KEY (office_id, matter_id) REFERENCES app._matters(office_id, matter_id),
+    matter_archived_at TIMESTAMPTZ,
+    FOREIGN KEY (office_id, matter_id, matter_archived_at) REFERENCES app._matters(office_id, matter_id, archived_at) ON UPDATE CASCADE ON DELETE CASCADE,
+    access_modifier TEXT NOT NULL,
+    CONSTRAINT custom_matter_access_access_modifier_check CHECK (access_modifier IN (
+        'enable', 'block'
+    )),
+    PRIMARY KEY (office_id, user_id, matter_id)
+);
+SELECT app.setup_office_scoped_table('custom_matter_access');
 
 -- ENTITIES (universal person/organization registry)
 CREATE TABLE app.entities (
@@ -944,31 +959,14 @@ CREATE POLICY user_profiles_policy ON app.user_profiles FOR ALL TO api
 
 -- SYSTEM USER SEED
 -- Unattended writes (cron, migrations, admin scripts) attribute to this
--- user via `runAsSystem(...)` in @makase-law/shared. The auth.users row is
--- deliberately unlogin-able (no password, banned). The on_auth_user_created
--- trigger creates the matching app.user_profiles row.
-INSERT INTO auth.users (
-    instance_id,
-    id,
-    aud,
-    role,
-    email,
-    email_confirmed_at,
-    raw_user_meta_data,
-    created_at,
-    updated_at,
-    banned_until
-) VALUES (
-    '00000000-0000-0000-0000-000000000000',
+-- user via `runAsSystem(...)` in @makase-law/shared.
+-- Inserted directly into user_profiles; no auth.users row needed because
+-- the system user never authenticates.
+INSERT INTO app.user_profiles (user_id, display_name, email)
+VALUES (
     '00000000-0000-0000-0000-000000000001',
-    'authenticated',
-    'authenticated',
-    'system@makase.internal',
-    NOW(),
-    '{"name": "SYSTEM"}'::jsonb,
-    NOW(),
-    NOW(),
-    'infinity'
+    'SYSTEM',
+    'system@makase.com'
 );
--- This system user will need to be added as employee to all offices.
+
 

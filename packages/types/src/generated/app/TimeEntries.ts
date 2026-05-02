@@ -2,7 +2,7 @@ import type { OfficesOfficeId } from './Offices.js';
 import type { TeamsTeamId } from './Teams.js';
 import type { TasksTaskId } from './Tasks.js';
 import type { InvoicesInvoiceId } from './Invoices.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app.time_entries */
@@ -20,7 +20,7 @@ export default interface TimeEntriesTable {
 
   invoice_id: ColumnType<InvoicesInvoiceId | null, InvoicesInvoiceId | null, InvoicesInvoiceId | null>;
 
-  user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+  user_id: ColumnType<UserProfilesUserId, UserProfilesUserId, UserProfilesUserId>;
 
   start_timestamp: ColumnType<Date, Date | string, Date | string>;
 
@@ -32,11 +32,11 @@ export default interface TimeEntriesTable {
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  created_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
 export type TimeEntries = Selectable<TimeEntriesTable>;

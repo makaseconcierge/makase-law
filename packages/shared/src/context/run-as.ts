@@ -11,10 +11,15 @@ import type { EmployeeContext } from "./logged-in-context";
  */
 export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001";
 
-export async function runAsEmployee<T>(
+type RunAsEmployeeParams = {
   employee: Employee,
   permissions: Permissions,
   teamIds: string[],
+  blockMatterIds: string[],
+  addMatterIds: string[],
+};
+export async function runAsEmployee<T>(
+  { employee, permissions, teamIds=[], blockMatterIds=[], addMatterIds=[] }: RunAsEmployeeParams,
   fn: () => Promise<T>,
 ): Promise<T> {
   const userContext = getUserContext();
@@ -37,6 +42,8 @@ export async function runAsEmployee<T>(
     isSystem: false,
     permissions,
     teamIds,
+    blockMatterIds,
+    addMatterIds,
   };
   return authenticatedContext.run(employeeContext, fn);
 }
@@ -83,6 +90,8 @@ export async function runAsSystem<T>(office_id: string, fn: () => Promise<T>): P
       isSystem: true,
       permissions: {},
       teamIds: [],
+      blockMatterIds: [],
+      addMatterIds: [],
     };
     return authenticatedContext.run(employeeContext, fn);
   });

@@ -15,6 +15,7 @@ import type { default as LeadsTable } from './Leads.js';
 import type { default as OfficesTable } from './Offices.js';
 import type { default as UserProfilesTable } from './UserProfiles.js';
 import type { default as MattersTable } from './Matters.js';
+import type { default as CustomMatterAccessTable } from './CustomMatterAccess.js';
 
 export default interface AppSchema {
   audit_log: AuditLogTable;
@@ -50,6 +51,8 @@ export default interface AppSchema {
   user_profiles: UserProfilesTable;
 
   _matters: MattersTable;
+
+  custom_matter_access: CustomMatterAccessTable;
 
   employees: EmployeesTable;
 

@@ -2,7 +2,7 @@ import type { OfficesOfficeId } from './Offices.js';
 import type { TeamsTeamId } from './Teams.js';
 import type { MattersMatterId } from './Matters.js';
 import type { LeadsLeadId } from './Leads.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for app.tasks */
@@ -20,7 +20,7 @@ export default interface TasksTable {
 
   lead_id: ColumnType<LeadsLeadId | null, LeadsLeadId | null, LeadsLeadId | null>;
 
-  assigned_to: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+  assigned_to: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
 
   name: ColumnType<string, string, string>;
 
@@ -40,11 +40,11 @@ export default interface TasksTable {
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  created_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
 export type Tasks = Selectable<TasksTable>;

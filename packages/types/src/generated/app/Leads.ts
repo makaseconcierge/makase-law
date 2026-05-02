@@ -2,7 +2,7 @@ import type { OfficesOfficeId } from './Offices.js';
 import type { TeamsTeamId } from './Teams.js';
 import type { JsonValue } from '../../json-types.js';
 import type { EntitiesEntityId } from './Entities.js';
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
+import type { UserProfilesUserId } from './UserProfiles.js';
 import type { MattersMatterId } from './Matters.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
@@ -43,19 +43,19 @@ export default interface LeadsTable {
 
   existing_entity_check_passed_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  existing_entity_check_passed_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+  existing_entity_check_passed_by: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
 
   conflict_check_passed_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  conflict_check_passed_by: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+  conflict_check_passed_by: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
 
   matter_data: ColumnType<JsonValue, JsonValue | undefined, JsonValue>;
 
   score: ColumnType<string | null, string | null, string | null>;
 
-  suggested_attorney_user_id: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+  suggested_attorney_user_id: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
 
-  assigned_attorney_user_id: ColumnType<auth_UsersId | null, auth_UsersId | null, auth_UsersId | null>;
+  assigned_attorney_user_id: ColumnType<UserProfilesUserId | null, UserProfilesUserId | null, UserProfilesUserId | null>;
 
   consultation_scheduled_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
@@ -67,11 +67,11 @@ export default interface LeadsTable {
 
   created_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  created_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  created_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  updated_by: ColumnType<auth_UsersId, auth_UsersId | undefined, auth_UsersId>;
+  updated_by: ColumnType<UserProfilesUserId, UserProfilesUserId | undefined, UserProfilesUserId>;
 }
 
 export type Leads = Selectable<LeadsTable>;

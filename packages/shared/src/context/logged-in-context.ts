@@ -13,6 +13,8 @@ export type EmployeeContext = {
   isSystem: boolean,
   permissions: Permissions,
   teamIds: string[],
+  blockMatterIds: string[],
+  addMatterIds: string[],
 };
 
 export type UserContext = {

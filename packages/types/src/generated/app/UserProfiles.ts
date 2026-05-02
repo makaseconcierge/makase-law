@@ -1,9 +1,11 @@
-import type { UsersId as auth_UsersId } from '../auth/Users.js';
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
+
+/** Identifier type for app.user_profiles */
+export type UserProfilesUserId = string;
 
 /** Represents the table app.user_profiles */
 export default interface UserProfilesTable {
-  user_id: ColumnType<auth_UsersId, auth_UsersId, auth_UsersId>;
+  user_id: ColumnType<UserProfilesUserId, UserProfilesUserId, UserProfilesUserId>;
 
   display_name: ColumnType<string, string, string>;
 

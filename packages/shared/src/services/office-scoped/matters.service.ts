@@ -1,14 +1,14 @@
 import type { MatterPatch, NewMatter } from "@makase-law/types";
 import { getLogger } from "@logtape/logtape";
 import { getEmployeeContext } from "../../context/logged-in-context";
-import { getScope, buildScopeFilter } from "../../context/scope";
+import { getScope, buildMatterBasedScopeFilter } from "../../context/scope";
 
 const logger = getLogger(["matterService"]);
 
 const MATTERS_RESOURCE = "matters";
 
 const permitMatter = (action: string) =>
-  buildScopeFilter(MATTERS_RESOURCE, action, ["responsible_attorney_id", "supervising_attorney_id"]);
+  buildMatterBasedScopeFilter(MATTERS_RESOURCE, action, ["responsible_attorney_id", "supervising_attorney_id"]);
 
 /**
  * Deferred subquery of matter_ids the caller may access for `action` on

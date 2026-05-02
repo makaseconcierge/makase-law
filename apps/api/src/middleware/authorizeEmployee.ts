@@ -25,10 +25,11 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
 
-  const [employee, permissions, teamIds] = await Promise.all([
+  const [employee, permissions, teamIds, customMatterAccess] = await Promise.all([
     loggedInUserService.getEmploymentAtOffice(office_id),
     loggedInUserService.getPermissionsAtOffice(office_id),
     loggedInUserService.getTeamIdsAtOffice(office_id),
+    loggedInUserService.getCustomMatterAccessAtOffice(office_id),
   ]);
   if (!employee) {
     return c.json(
@@ -37,6 +38,13 @@ export const authorizeEmployee = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
 
+  const blockMatterIds = customMatterAccess
+    .filter(({ access_modifier }) => access_modifier === "block")
+    .map(({ matter_id }) => matter_id);
+  const addMatterIds = customMatterAccess
+    .filter(({ access_modifier }) => access_modifier === "add")
+    .map(({ matter_id }) => matter_id);
+
   c.set("employee", employee);
-  await runAsEmployee(employee, permissions, teamIds, () => next());
+  await runAsEmployee({ employee, permissions, teamIds, blockMatterIds, addMatterIds }, () => next());
 });

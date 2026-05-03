@@ -85,7 +85,8 @@ export type LeadPatch = Partial<Omit<Lead, AuditColumns | "lead_id" | "office_id
 
 export type Task = DatesToStrings<Tasks>;
 export type NewTask = Omit<NewTasks, AuditColumns | "office_id">;
-export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id"| "matter_id">>;
+export type TaskPatch = Partial<Omit<Task, AuditColumns | "task_id" | "office_id"| "team_id" |  "matter_id">>;
+export type TaskReasignment = Pick<Task, "assigned_to" | "team_id" | "matter_id">;
 
 export type Invoice = DatesToStrings<Invoices>;
 export type NewInvoice = Omit<NewInvoices, AuditColumns | "office_id">;

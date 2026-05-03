@@ -90,7 +90,10 @@ export const buildMatterTeamSelfScopeFilter = <T extends TeamSelfMatterTables> (
       : nonMatterScopeFilter;
 
     const blockMatterFilter = blockMatterIds.length && !isAdmin ?
-      eb.not(eb("matter_id", "in", blockMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">))
+      eb.or([
+        eb("matter_id", "is", null),
+        eb.not(eb("matter_id", "in", blockMatterIds as OperandValueExpressionOrList<DB, T, "matter_id">)),
+      ])
       : eb.lit(true);
     return eb.and([
       isLoggedInOffice,
